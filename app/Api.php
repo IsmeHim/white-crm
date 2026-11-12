@@ -580,10 +580,10 @@ final class Api {
     private function dashboard(): array {
         $dateFrom=isset($_GET['date_from'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_from'])?(string)$_GET['date_from']:'';
         $dateTo=isset($_GET['date_to'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_to'])?(string)$_GET['date_to']:'';
-        $cacheKey='dashboard-overview-v2-'.$dateFrom.'-'.$dateTo;
+        $cacheKey='dashboard-overview-v4-'.$dateFrom.'-'.$dateTo;
         $stats=$this->store->cached($cacheKey,60,function() use ($dateFrom,$dateTo){
             $counts=[];foreach(['contacts','campaigns','donations','hadeeya','stock_lots','shipments','tasks','feedback'] as $k)$counts[$k]=$this->store->count($k);
-            $amount=0;$pendingAmount=0;$periodCount=0;$byCampaign=[];$byMonth=[];$status=[];
+            $amount=0;$pendingAmount=0;$periodCount=0;$byCampaign=[];$byCampaignCounts=[];$byMonth=[];$byMonthCounts=[];$status=[];
             foreach($this->store->summaries('donations') as $d){
                 $dDate=substr((string)(($d['donated_at']??'')!==''?$d['donated_at']:($d['created_at']??'')),0,10);
                 if($dateFrom!=='' && ($dDate===''||$dDate<$dateFrom))continue;
@@ -594,12 +594,18 @@ final class Api {
                 if($s==='pending')$pendingAmount+=$v;
                 if($s!=='confirmed')continue;
                 $amount+=$v;
-                $c=(string)($d['campaign_id']??'unknown');$byCampaign[$c]=($byCampaign[$c]??0)+$v;
-                $month=substr($dDate,0,7);if(preg_match('/^\d{4}-\d\d$/',$month))$byMonth[$month]=($byMonth[$month]??0)+$v;
+                $c=(string)($d['campaign_id']??'unknown');
+                $byCampaign[$c]=($byCampaign[$c]??0)+$v;
+                $byCampaignCounts[$c]=($byCampaignCounts[$c]??0)+1;
+                $month=substr($dDate,0,7);
+                if(preg_match('/^\d{4}-\d\d$/',$month)){
+                    $byMonth[$month]=($byMonth[$month]??0)+$v;
+                    $byMonthCounts[$month]=($byMonthCounts[$month]??0)+1;
+                }
             }
-            ksort($byMonth);arsort($byCampaign);
+            ksort($byMonth);ksort($byMonthCounts);arsort($byCampaign);
             $low=[];foreach($this->store->summaries('stock_lots') as $lot)if((int)($lot['quantity']??0)<=5)$low[]=['lot_code'=>$lot['lot_code']??'','quantity'=>$lot['quantity']??0];
-            return ['counts'=>$counts,'confirmed_satang'=>$amount,'pending_satang'=>$pendingAmount,'period_donations_count'=>$periodCount,'date_from'=>$dateFrom,'date_to'=>$dateTo,'donation_status'=>$status,'by_month'=>array_slice($byMonth,-12,null,true),'by_campaign'=>array_slice($byCampaign,0,10,true),'low_stock'=>array_slice($low,0,8)];
+            return ['counts'=>$counts,'confirmed_satang'=>$amount,'pending_satang'=>$pendingAmount,'period_donations_count'=>$periodCount,'date_from'=>$dateFrom,'date_to'=>$dateTo,'donation_status'=>$status,'by_month'=>array_slice($byMonth,-12,null,true),'by_month_counts'=>array_slice($byMonthCounts,-12,null,true),'by_campaign'=>array_slice($byCampaign,0,10,true),'by_campaign_counts'=>$byCampaignCounts,'low_stock'=>array_slice($low,0,8)];
         });
         $ann=[];foreach($this->store->summaries('announcements') as $a)if(($a['status']??'')==='published')$ann[]=['title'=>$a['title'],'created_at'=>$a['created_at']];
         usort($ann,fn($a,$b)=>strcmp($b['created_at'],$a['created_at']));$stats['announcements']=array_slice($ann,0,4);
