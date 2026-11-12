@@ -65,7 +65,7 @@ $csrf = crm_csrf();
     <meta name="description" content="White Channel CRM V2 | Portable No-SQL CRM">
     <link rel="manifest" href="assets/manifest.webmanifest">
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="assets/app.css?v=3.0.4">
+    <link rel="stylesheet" href="assets/app.css?v=3.1.2">
     <title>White Channel CRM V2</title>
 </head>
 
@@ -113,7 +113,8 @@ $csrf = crm_csrf();
                 <header class="topbar"><button class="icon-btn mobile-menu" id="menu-open" aria-label="เปิดเมนู">☰</button>
                     <div class="crumb">WHITE CHANNEL <span>/</span> <strong id="crumb-current">ภาพรวมระบบ</strong></div>
                     <div class="top-actions">
-                        <div class="top-search" id="top-search"><span class="top-search-icon" aria-hidden="true">⌕</span><input id="global-search" class="top-search-input" type="search" autocomplete="off" placeholder="ค้นหา หรือพิมพ์สั่ง AI…" aria-label="ค้นหาทั้งระบบ"><button type="button" class="top-search-ai-btn" id="ai-search-btn" title="กดเพื่อให้ Gemini AI วิเคราะห์และพาไปหน้าที่ต้องการ">✦ AI</button>
+                        <button type="button" class="btn primary small quick-slip-top-btn" id="top-live-slip-btn" title="คีย์ใบรับบริจาคจากรายการสดด่วน (One-Stop Slip)">⚡ คีย์ใบงาน TV สด</button>
+                        <div class="top-search" id="top-search"><span class="top-search-icon" aria-hidden="true">⌕</span><input id="global-search" class="top-search-input" type="search" autocomplete="off" placeholder="ค้นหา หรือพิมพ์สั่ง AI…" aria-label="ค้นหาทั้งระบบ"><button type="button" class="top-search-ai-btn" id="ai-search-btn" title="กดเพื่อให้ AI วิเคราะห์และพาไปหน้าที่ต้องการ">✦ AI</button>
                             <div class="top-search-results hidden" id="global-search-results" role="listbox"></div>
                         </div><span class="top-badge"><i></i> ระบบพร้อมใช้งาน</span><button class="icon-btn" id="theme-toggle" aria-label="เปลี่ยนธีม" title="สลับธีม">◐</button>
                         <div class="avatar miniavatar"><?= crm_e(mb_substr($user['name'] ?? 'A', 0, 1)) ?></div>
@@ -139,7 +140,7 @@ $csrf = crm_csrf();
         </div>
         <div id="toast-root" aria-live="polite" class="toast-root"></div>
     <?php endif; ?>
-    <script defer src="assets/app.js?v=3.0.4"></script>
+    <script defer src="assets/app.js?v=3.1.2"></script>
 </body>
 
 </html>

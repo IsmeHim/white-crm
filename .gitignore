@@ -1,0 +1,53 @@
+# Environment & Sensitive Config
+.env
+.env.*
+!.env.example
+
+# SQLite Database & Storage Data
+/storage/*.sqlite
+/storage/*.sqlite-shm
+/storage/*.sqlite-wal
+/storage/*.sqlite-journal
+
+# Uploaded Files, Exports, Backups & Locks
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/storage/exports/*
+!/storage/exports/.gitkeep
+/storage/backups/*
+!/storage/backups/.gitkeep
+/storage/locks/*
+!/storage/locks/.gitkeep
+
+# Logs & Temporary Files
+*.log
+error_log
+/storage/logs/*
+!/storage/logs/.gitkeep
+*.tmp
+*.bak
+*.cache
+
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE & Code Editor Folders
+.vscode/
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# Dependencies
+/vendor/
+/node_modules/
