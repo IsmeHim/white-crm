@@ -243,9 +243,16 @@
     const type=field.type;let input='';const id='f_'+k;const required=field.required?'required':'';
     const isReadonly=Boolean(field.readonly || (editing && field.readonly_on_edit));
     const ph=(editing && field.readonly_on_edit)?'แก้ไขยอดได้ที่ปุ่ม "ปรับสต็อก" ในตาราง':(field.placeholder||('กรอก'+field.label+'…'));
+    let reqTag=field.required?`<span class="req-star" title="จำเป็นต้องกรอก">*</span>`:`<span class="opt-tag">(ไม่บังคับ)</span>`;
+    if(field.auto_code)reqTag=`<span class="opt-tag" style="color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.12)">(เว้นว่างเพื่อรันอัตโนมัติ)</span>`;
+    else if(editing && field.readonly_on_edit)reqTag=`<span class="opt-tag">(ปรับยอดที่ปุ่ม ปรับสต็อก)</span>`;
+    else if(field.readonly)reqTag=`<span class="opt-tag">(อัตโนมัติ)</span>`;
+
     if(type==='relation'){
       if(value&&!state.options[field.module]?.[value]&&roleAllows(field.module)){await optionNames(field.module).catch(()=>({}));}
       const known=state.options[field.module]?.[value] || (value?String(value):'');
+      const canQuickAdd=(field.module==='contacts'&&roleAllows('contacts',true));
+      const quickAddBtn=canQuickAdd?`<button type="button" class="btn small relation-quick-add-btn" data-target="${id}" data-rel="${esc(field.module)}" style="font-size:11px;padding:2px 8px;min-height:22px;margin-left:auto;font-weight:750;color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.1)">＋ สร้างผู้บริจาคใหม่</button>`:'';
       input=`<div class="relation-picker">
         <span class="relation-icon" aria-hidden="true">⌕</span>
         <input type="hidden" id="${id}" name="${esc(k)}" value="${esc(value)}">
@@ -253,6 +260,7 @@
         <button type="button" class="relation-clear ${value?'':'hidden'}" title="ล้างค่าที่เลือก" aria-label="ล้างค่า">×</button>
         <div class="relation-results hidden"></div>
       </div>`;
+      return `<label class="form-field" for="${id}"><div class="field-title" style="display:flex;align-items:center;justify-content:space-between;width:100%"><span style="display:inline-flex;align-items:center;gap:4px">${esc(field.label)} ${reqTag}</span>${quickAddBtn}</div>${input}</label>`;
     } else if(type==='select'){
       const selPh=field.placeholder||'— เลือกรายการ —';
       input=`<select id="${id}" name="${esc(k)}" ${required}><option value="">${esc(selPh)}</option>${Object.entries(field.options).map(([key,text])=>`<option value="${esc(key)}" ${String(value)===key?'selected':''}>${esc(text)}</option>`).join('')}</select>`;
@@ -263,15 +271,124 @@
     } else {
       input=`<input id="${id}" name="${esc(k)}" type="${type==='date'?'date':type==='email'?'email':type==='integer'?'number':'text'}" placeholder="${esc(ph)}" value="${esc(value)}" ${type==='integer'?'min="0"':''} ${required} ${isReadonly?'disabled':''}>`;
     }
-    let reqTag=field.required?`<span class="req-star" title="จำเป็นต้องกรอก">*</span>`:`<span class="opt-tag">(ไม่บังคับ)</span>`;
-    if(field.auto_code)reqTag=`<span class="opt-tag" style="color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.12)">(เว้นว่างเพื่อรันอัตโนมัติ)</span>`;
-    else if(editing && field.readonly_on_edit)reqTag=`<span class="opt-tag">(ปรับยอดที่ปุ่ม ปรับสต็อก)</span>`;
-    else if(field.readonly)reqTag=`<span class="opt-tag">(อัตโนมัติ)</span>`;
     return `<label class="form-field ${type==='textarea'?'field-full':''}" for="${id}"><span class="field-title">${esc(field.label)} ${reqTag}</span>${input}</label>`;
   }
+  function showInlineContactCreator(picker, target, input, initialText=''){
+    const fieldWrap = picker.closest('.form-field') || picker.parentElement;
+    let existingBox = fieldWrap.querySelector('.inline-contact-box');
+    if(existingBox){
+      existingBox.remove();
+      return;
+    }
+    const isDigits = /^[\d\s+-]{6,}$/.test(initialText.trim());
+    const defaultPhone = isDigits ? initialText.trim() : '';
+    const defaultName = isDigits ? '' : initialText.trim();
+
+    const boxHtml = `
+      <div class="inline-contact-box" style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--accent);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);grid-column:1/-1">
+        <div style="font-weight:800;font-size:12px;color:var(--accent-text);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span>＋ สร้างข้อมูลผู้บริจาคใหม่ทันที (บันทึกแล้วจะเลือกให้อัตโนมัติ)</span>
+          <button type="button" class="btn small ghost" id="inline-con-close" style="padding:0 6px;min-height:20px;font-size:16px" title="ปิด">×</button>
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:9px">
+          <label class="form-field" style="margin:0"><span class="field-title">ชื่อ-นามสกุล / นามแฝง <span class="req-star">*</span></span><input id="quick-con-name" value="${esc(defaultName)}" placeholder="เช่น คุณสมชาย ใจดี" required autocomplete="off"></label>
+          <label class="form-field" style="margin:0"><span class="field-title">เบอร์โทรศัพท์ <span class="req-star">*</span></span><input id="quick-con-phone" type="tel" value="${esc(defaultPhone)}" placeholder="เช่น 081-234-5678" required autocomplete="off"></label>
+          <label class="form-field field-full" style="margin:0"><span class="field-title">ที่อยู่จัดส่งพัสดุ <span class="opt-tag">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</span></span><input id="quick-con-address" placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ" autocomplete="off"></label>
+          <label class="form-field field-full" style="margin:0"><span class="field-title">จังหวัด</span><input id="quick-con-province" placeholder="เช่น กรุงเทพฯ" autocomplete="off"></label>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+          <button type="button" class="btn small" id="inline-con-cancel">ยกเลิก</button>
+          <button type="button" class="btn small primary" id="inline-con-save" style="font-weight:800">✓ บันทึกและเลือกผู้บริจาคนี้</button>
+        </div>
+      </div>
+    `;
+
+    fieldWrap.insertAdjacentHTML('beforeend', boxHtml);
+    const box = fieldWrap.querySelector('.inline-contact-box');
+
+    const nameInput = box.querySelector('#quick-con-name');
+    const phoneInput = box.querySelector('#quick-con-phone');
+    const addrInput = box.querySelector('#quick-con-address');
+    const provInput = box.querySelector('#quick-con-province');
+    const saveBtn = box.querySelector('#inline-con-save');
+
+    addrInput?.addEventListener('input', () => {
+      const p = detectThaiProvince(addrInput.value);
+      if(p && provInput && !provInput.value.trim()) provInput.value = p;
+    });
+
+    const closeBox = () => { box.remove(); input.focus(); };
+    box.querySelector('#inline-con-close')?.addEventListener('click', closeBox);
+    box.querySelector('#inline-con-cancel')?.addEventListener('click', closeBox);
+
+    saveBtn?.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim();
+      const address = addrInput.value.trim();
+      const province = provInput.value.trim();
+
+      if(!name){
+        toast('กรุณาระบุชื่อผู้บริจาค', true);
+        nameInput.focus();
+        return;
+      }
+      if(!phone || phone.replace(/\D+/g,'').length < 9){
+        toast('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก', true);
+        phoneInput.focus();
+        return;
+      }
+
+      saveBtn.disabled = true;
+      try {
+        const payload = {
+          name,
+          phone,
+          address,
+          province: province || detectThaiProvince(address) || '',
+          type: 'donor'
+        };
+        const res = await api('record', {module:'contacts'}, 'POST', payload);
+        const newRec = res.record;
+        state.options.contacts = state.options.contacts || {};
+        state.options.contacts[newRec.id] = newRec.name;
+
+        target.value = newRec.id;
+        input.value = newRec.name + (newRec.phone ? ' (' + newRec.phone + ')' : '');
+        const clearBtn = picker.querySelector('.relation-clear');
+        clearBtn?.classList.remove('hidden');
+
+        box.remove();
+        toast(`สร้างผู้บริจาค "${newRec.name}" เรียบร้อยและเลือกให้อัตโนมัติ`);
+
+        const nextField = fieldWrap.closest('form')?.querySelector('#f_amount_satang, #f_campaign_id');
+        if(nextField) nextField.focus();
+      } catch(err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    setTimeout(() => {
+      if(!defaultName) nameInput.focus();
+      else if(!defaultPhone) phoneInput.focus();
+      else addrInput.focus();
+    }, 50);
+  }
   function wireRelationSearch(form){
+    form.querySelectorAll('.relation-quick-add-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const target = form.querySelector('#' + btn.dataset.target);
+        const searchInput = form.querySelector('.relation-search[data-target="' + btn.dataset.target + '"]');
+        const picker = searchInput?.parentElement;
+        if(picker && target && searchInput){
+          showInlineContactCreator(picker, target, searchInput, searchInput.value.trim());
+        }
+      });
+    });
+
     form.querySelectorAll('.relation-search').forEach(input=>{
-      let t;const target=$('#'+input.dataset.target);
+      let t;const target=$('#'+input.dataset.target,form);
       const picker=input.parentElement;
       const results=picker.querySelector('.relation-results');
       const clearBtn=picker.querySelector('.relation-clear');
@@ -280,11 +397,24 @@
         e.preventDefault();e.stopPropagation();
         target.value='';input.value='';syncClear();input.focus();
       });
+      results.addEventListener('mousedown',e=>e.preventDefault());
       const loadOptions=async(q)=>{
         try{
           const r=await api('options',{module:input.dataset.rel,q});
-          results.innerHTML=r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>';
+          const isContacts=(input.dataset.rel==='contacts');
+          let createBtnHtml='';
+          if(isContacts && roleAllows('contacts',true)){
+            createBtnHtml=`<div style="padding:6px;border-top:1px dashed var(--line);background:rgba(162,187,59,.07)"><button type="button" class="btn small primary relation-inline-create-btn" style="width:100%;font-size:11.5px;font-weight:800;gap:5px;justify-content:center">＋ สร้างผู้บริจาคใหม่ทันที${q?` "${esc(q)}"`:''}</button></div>`;
+          }
+          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
           results.classList.remove('hidden');
+
+          results.querySelector('.relation-inline-create-btn')?.addEventListener('click',e=>{
+            e.preventDefault();e.stopPropagation();
+            results.classList.add('hidden');
+            showInlineContactCreator(picker,target,input,q);
+          });
+
           results.querySelectorAll('[data-id]').forEach(btn=>btn.addEventListener('click',async()=>{
             target.value=btn.dataset.id;input.value=btn.dataset.name;results.classList.add('hidden');syncClear();
             if(input.dataset.rel==='donations' && btn.dataset.shipnote){
@@ -1136,19 +1266,22 @@
     $('#page-content').innerHTML=header('PREFERENCES / SETTINGS','ตั้งค่าระบบส่วนตัว','เปลี่ยนธีม รหัสผ่าน สำรองฐานข้อมูล และตั้งค่า Gemini AI ช่วยค้นหา')+
       `<div class="dashboard-grid">
         <section class="panel"><h3>ธีมสีแอปพลิเคชัน</h3><p class="muted">ระบบรองรับธีมดั้งเดิม Modern Navy และ Dark Mode</p><div class="form-grid"><button type="button" class="btn ${t==='premium'?'primary':''}" data-theme="premium">◉ Premium Navy + Olive</button><button type="button" class="btn ${t==='classic'?'primary':''}" data-theme="classic">◉ Classic Green + White</button><button type="button" class="btn ${t==='dark'?'primary':''}" data-theme="dark">◉ Dark Professional</button></div></section>
-        <section class="panel"><h3>เปลี่ยนรหัสผ่าน</h3><div id="password-form" class="stack" style="display:grid;gap:15px"><label class="form-field"><span class="field-title">รหัสผ่านปัจจุบัน <span class="req-star">*</span></span><input name="current_password" type="password" placeholder="กรอกรหัสผ่านที่ใช้งานอยู่ในปัจจุบัน…" autocomplete="current-password"></label><label class="form-field"><span class="field-title">รหัสผ่านใหม่ (12 ตัวขึ้นไป) <span class="req-star">*</span></span><input name="new_password" type="password" minlength="12" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 12 ตัวอักษร…" autocomplete="new-password"></label><button type="button" id="save-password-btn" class="btn primary">บันทึกรหัสผ่านใหม่</button></div></section>
+        <section class="panel"><h3>เปลี่ยนรหัสผ่าน</h3><div id="password-form" class="stack" style="display:grid;gap:14px"><label class="form-field"><span class="field-title">รหัสผ่านปัจจุบัน <span class="req-star">*</span></span><input name="current_password" type="password" placeholder="กรอกรหัสผ่านที่ใช้งานอยู่ในปัจจุบัน…" autocomplete="current-password"></label><label class="form-field"><span class="field-title">รหัสผ่านใหม่ (12 ตัวขึ้นไป) <span class="req-star">*</span></span><input name="new_password" type="password" minlength="12" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 12 ตัวอักษร…" autocomplete="new-password"></label><div class="form-actions" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><small class="muted">🔒 รหัสผ่านต้องมีความยาว 12 ตัวขึ้นไป</small><button type="button" id="save-password-btn" class="btn primary" style="font-weight:800;padding:0 18px">✓ บันทึกรหัสผ่านใหม่</button></div></div></section>
       </div>
       <section class="panel" style="margin-bottom:18px">
         <div class="panel-head"><div><h3>✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ</h3><small>ช่วยให้พิมพ์ค้นหาหรือสั่งเปิดหน้าต่างๆ ได้แม่นยำแม้พิมพ์สะกดผิด หรือพิมพ์คำใกล้เคียง</small></div><span id="ai-status-pill" class="pill ${aiCfg.enabled&&aiCfg.has_key?'green':'yellow'}">${aiCfg.enabled&&aiCfg.has_key?'✦ เปิดใช้งาน AI แล้ว':'ยังไม่ได้ตั้งค่า API Key'}</span></div>
         ${aiCfg.can_edit?`<div id="ai-config-form" class="stack" style="display:grid;gap:18px">
           <div class="form-grid">
             <div>
-              <div class="field-label-row">
+              <div class="field-label-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
                 <label for="ai-key-input" style="margin:0">Gemini API Key</label>
-                <div id="ai-key-badge" class="key-badge ${aiCfg.has_key?'saved':'empty'}">
-                  <span class="key-badge-dot"></span>
-                  <span class="key-badge-title">${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
-                  <code id="ai-masked-label">${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div id="ai-key-badge" class="key-badge ${aiCfg.has_key?'saved':'empty'}">
+                    <span class="key-badge-dot"></span>
+                    <span class="key-badge-title">${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
+                    <code id="ai-masked-label">${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+                  </div>
+                  ${aiCfg.has_key?`<button type="button" class="btn small danger clear-ai-key-btn" title="ลบ API Key ปัจจุบันออกจากระบบ" style="padding:2px 8px;min-height:24px;font-size:11px;font-weight:750">🗑️ ลบ Key ปัจจุบัน</button>`:''}
                 </div>
               </div>
               <input id="ai-key-input" name="api_key" type="text" placeholder="${aiCfg.has_key?'เว้นว่างไว้หากไม่ต้องการเปลี่ยนคีย์เดิม':'วาง API Key ที่นี่ (เช่น AIzaSy...)'}" autocomplete="off" spellcheck="false">
@@ -1259,10 +1392,12 @@
       }catch(err){toast(err.message,true);}
       finally{btn.disabled=false;}
     });
-    $('#clear-ai-key')?.addEventListener('click',async()=>{
-      if(!confirm('ยืนยันการลบ Gemini API Key ออกจากระบบ?'))return;
+    const handleClearKey = async () => {
+      if(!confirm('ยืนยันการลบ API Key ปัจจุบันออกจากระบบหรือไม่?')) return;
       try{await api('ai-config',{},'POST',{clear_key:true,enabled:false});toast('ลบ API Key เรียบร้อยแล้ว');render();}catch(err){toast(err.message,true);}
-    });
+    };
+    $('#clear-ai-key')?.addEventListener('click', handleClearKey);
+    document.querySelectorAll('.clear-ai-key-btn').forEach(btn => btn.addEventListener('click', handleClearKey));
   }
   async function openAiConfigModal(){
     let aiCfg={enabled:false,has_key:false,masked_key:'',model:'gemini-3.5-flash-lite',auto_fallback:true,usage:{},can_edit:state.user?.role==='admin'};
@@ -1272,12 +1407,15 @@
     modal('✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ',`<div id="modal-ai-form" class="stack" style="display:grid;gap:18px">
       <div class="ai-box"><div class="ai-box-head"><span>✦ AI Smart Search & Navigation</span><span>${aiCfg.enabled&&aiCfg.has_key?'เปิดใช้งานแล้ว':'ยังไม่ตั้งค่า'}</span></div><div class="ai-box-text">เมื่อเปิดใช้งาน ระบบจะใช้ Gemini ช่วยเดาคำค้นหาที่พิมพ์ผิด (เช่น พิมพ์ "บริจาก", "สมาชิค", "ส่งของ") แล้วพาไปยังหน้าที่ถูกต้องหรือเปิดข้อมูลให้ทันที${curUsage?`<br><strong style="color:var(--accent-text)">📊 โควต้าวันนี้ (${esc(aiCfg.model)}): ใช้ไป ${num(curUsage.rpd_used)} / ${num(curUsage.rpd_limit)} ครั้ง (คงเหลือ ${num(curUsage.rpd_remaining)} ครั้ง)</strong>`:''}</div></div>
       <div>
-        <div class="field-label-row">
+        <div class="field-label-row" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
           <label for="m-ai-key" style="margin:0">Gemini API Key</label>
-          <div class="key-badge ${aiCfg.has_key?'saved':'empty'}">
-            <span class="key-badge-dot"></span>
-            <span>${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
-            <code>${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="key-badge ${aiCfg.has_key?'saved':'empty'}">
+              <span class="key-badge-dot"></span>
+              <span>${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
+              <code>${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+            </div>
+            ${aiCfg.has_key?`<button type="button" class="btn small danger" id="m-clear-ai-key" style="padding:1px 8px;min-height:24px;font-size:11px;font-weight:750">🗑️ ลบ Key ปัจจุบัน</button>`:''}
           </div>
         </div>
         <input id="m-ai-key" name="api_key" type="text" placeholder="${aiCfg.has_key?'เว้นว่างไว้หากไม่ต้องการเปลี่ยนคีย์':'วาง API Key ที่นี่ (เช่น AIzaSy...)'}" autocomplete="off" spellcheck="false">
@@ -1295,6 +1433,17 @@
       <div class="form-actions" style="margin-top:10px"><button type="button" class="btn" id="cancel-modal">ยกเลิก</button><button type="button" id="m-save-ai" class="btn primary">✦ บันทึก API Key</button></div>
     </div>`);
     $('#cancel-modal').onclick=closeModal;
+    $('#m-clear-ai-key')?.addEventListener('click', async () => {
+      if(!confirm('ยืนยันการลบ API Key ปัจจุบันออกจากระบบหรือไม่?')) return;
+      try {
+        await api('ai-config', {}, 'POST', {clear_key: true, enabled: false});
+        closeModal();
+        toast('ลบ API Key เรียบร้อยแล้ว');
+        if(state.module === 'settings') render();
+      } catch(err) {
+        toast(err.message, true);
+      }
+    });
     $('#m-save-ai').onclick=async()=>{
       const d={
         api_key:$('#m-ai-key')?.value||'',
