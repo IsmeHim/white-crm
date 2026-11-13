@@ -241,7 +241,7 @@
     state.table=r;
     for(const f of Object.values(schema.fields))if(f.type==='relation'&&roleAllows(f.module))await optionNames(f.module).catch(()=>({}));
     const canWrite=roleAllows(m,true)&&!schema.readonly;
-    const actions=canWrite?((m==='donations'?btn('⚡ คีย์ใบงาน TV สด','open-live-slip','primary')+' ':'')+btn('＋ เพิ่มข้อมูล','new',m==='donations'?'':'primary')):'';
+    const actions=canWrite?btn('＋ เพิ่มข้อมูล','new'):'';
     let filter='';if(schema.fields.status?.options)filter=`<select class="filter-select" id="status-filter" aria-label="กรองสถานะ"><option value="">ทุกสถานะ</option>${Object.entries(schema.fields.status.options).map(([k,v])=>`<option value="${esc(k)}" ${state.status===k?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
     const columns=schema.columns||['id','created_at'];
     const donationSummaryStrip=(m==='donations')?`<div class="filter-summary-strip">
@@ -257,7 +257,6 @@
       donationSummaryStrip+
       `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div>${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${quickActionBtn(m,row,canWrite)}<button class="btn small" data-view="${esc(row.id)}">${m==='contacts'?'♙ ดูโปรไฟล์ 360°':'ดูข้อมูล'}</button>${canWrite?`<button class="btn small ghost" data-edit="${esc(row.id)}">แก้ไข</button>`:''}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
     if(showDateFilter)wireDateFilterBar();
-    $('[data-action="open-live-slip"]')?.addEventListener('click',()=>openLiveSlipModal());
     $('[data-action="new"]')?.addEventListener('click',()=>openForm(m));
     $('[data-action="export"]')?.addEventListener('click',()=>{
       const u=new URL(location.pathname,location.href);
@@ -284,9 +283,16 @@
     const type=field.type;let input='';const id='f_'+k;const required=field.required?'required':'';
     const isReadonly=Boolean(field.readonly || (editing && field.readonly_on_edit));
     const ph=(editing && field.readonly_on_edit)?'แก้ไขยอดได้ที่ปุ่ม "ปรับสต็อก" ในตาราง':(field.placeholder||('กรอก'+field.label+'…'));
+    let reqTag=field.required?`<span class="req-star" title="จำเป็นต้องกรอก">*</span>`:`<span class="opt-tag">(ไม่บังคับ)</span>`;
+    if(field.auto_code)reqTag=`<span class="opt-tag" style="color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.12)">(เว้นว่างเพื่อรันอัตโนมัติ)</span>`;
+    else if(editing && field.readonly_on_edit)reqTag=`<span class="opt-tag">(ปรับยอดที่ปุ่ม ปรับสต็อก)</span>`;
+    else if(field.readonly)reqTag=`<span class="opt-tag">(อัตโนมัติ)</span>`;
+
     if(type==='relation'){
       if(value&&!state.options[field.module]?.[value]&&roleAllows(field.module)){await optionNames(field.module).catch(()=>({}));}
       const known=state.options[field.module]?.[value] || (value?String(value):'');
+      const canQuickAdd=(field.module==='contacts'&&roleAllows('contacts',true));
+      const quickAddBtn=canQuickAdd?`<button type="button" class="btn small relation-quick-add-btn" data-target="${id}" data-rel="${esc(field.module)}" style="font-size:11px;padding:2px 8px;min-height:22px;margin-left:auto;font-weight:750;color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.1)">＋ สร้างผู้บริจาคใหม่</button>`:'';
       input=`<div class="relation-picker">
         <span class="relation-icon" aria-hidden="true">⌕</span>
         <input type="hidden" id="${id}" name="${esc(k)}" value="${esc(value)}">
@@ -294,6 +300,7 @@
         <button type="button" class="relation-clear ${value?'':'hidden'}" title="ล้างค่าที่เลือก" aria-label="ล้างค่า">×</button>
         <div class="relation-results hidden"></div>
       </div>`;
+      return `<label class="form-field" for="${id}"><div class="field-title" style="display:flex;align-items:center;justify-content:space-between;width:100%"><span style="display:inline-flex;align-items:center;gap:4px">${esc(field.label)} ${reqTag}</span>${quickAddBtn}</div>${input}</label>`;
     } else if(type==='select'){
       const selPh=field.placeholder||'— เลือกรายการ —';
       input=`<select id="${id}" name="${esc(k)}" ${required}><option value="">${esc(selPh)}</option>${Object.entries(field.options).map(([key,text])=>`<option value="${esc(key)}" ${String(value)===key?'selected':''}>${esc(text)}</option>`).join('')}</select>`;
@@ -304,15 +311,124 @@
     } else {
       input=`<input id="${id}" name="${esc(k)}" type="${type==='date'?'date':type==='email'?'email':type==='integer'?'number':'text'}" placeholder="${esc(ph)}" value="${esc(value)}" ${type==='integer'?'min="0"':''} ${required} ${isReadonly?'disabled':''}>`;
     }
-    let reqTag=field.required?`<span class="req-star" title="จำเป็นต้องกรอก">*</span>`:`<span class="opt-tag">(ไม่บังคับ)</span>`;
-    if(field.auto_code)reqTag=`<span class="opt-tag" style="color:var(--accent-text);border-color:rgba(162,187,59,.4);background:rgba(162,187,59,.12)">(เว้นว่างเพื่อรันอัตโนมัติ)</span>`;
-    else if(editing && field.readonly_on_edit)reqTag=`<span class="opt-tag">(ปรับยอดที่ปุ่ม ปรับสต็อก)</span>`;
-    else if(field.readonly)reqTag=`<span class="opt-tag">(อัตโนมัติ)</span>`;
     return `<label class="form-field ${type==='textarea'?'field-full':''}" for="${id}"><span class="field-title">${esc(field.label)} ${reqTag}</span>${input}</label>`;
   }
+  function showInlineContactCreator(picker, target, input, initialText=''){
+    const fieldWrap = picker.closest('.form-field') || picker.parentElement;
+    let existingBox = fieldWrap.querySelector('.inline-contact-box');
+    if(existingBox){
+      existingBox.remove();
+      return;
+    }
+    const isDigits = /^[\d\s+-]{6,}$/.test(initialText.trim());
+    const defaultPhone = isDigits ? initialText.trim() : '';
+    const defaultName = isDigits ? '' : initialText.trim();
+
+    const boxHtml = `
+      <div class="inline-contact-box" style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--accent);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);grid-column:1/-1">
+        <div style="font-weight:800;font-size:12px;color:var(--accent-text);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+          <span>＋ สร้างข้อมูลผู้บริจาคใหม่ทันที (บันทึกแล้วจะเลือกให้อัตโนมัติ)</span>
+          <button type="button" class="btn small ghost" id="inline-con-close" style="padding:0 6px;min-height:20px;font-size:16px" title="ปิด">×</button>
+        </div>
+        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:9px">
+          <label class="form-field" style="margin:0"><span class="field-title">ชื่อ-นามสกุล / นามแฝง <span class="req-star">*</span></span><input id="quick-con-name" value="${esc(defaultName)}" placeholder="เช่น คุณสมชาย ใจดี" required autocomplete="off"></label>
+          <label class="form-field" style="margin:0"><span class="field-title">เบอร์โทรศัพท์ <span class="req-star">*</span></span><input id="quick-con-phone" type="tel" value="${esc(defaultPhone)}" placeholder="เช่น 081-234-5678" required autocomplete="off"></label>
+          <label class="form-field field-full" style="margin:0"><span class="field-title">ที่อยู่จัดส่งพัสดุ <span class="opt-tag">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</span></span><input id="quick-con-address" placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ" autocomplete="off"></label>
+          <label class="form-field field-full" style="margin:0"><span class="field-title">จังหวัด</span><input id="quick-con-province" placeholder="เช่น กรุงเทพฯ" autocomplete="off"></label>
+        </div>
+        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
+          <button type="button" class="btn small" id="inline-con-cancel">ยกเลิก</button>
+          <button type="button" class="btn small primary" id="inline-con-save" style="font-weight:800">✓ บันทึกและเลือกผู้บริจาคนี้</button>
+        </div>
+      </div>
+    `;
+
+    fieldWrap.insertAdjacentHTML('beforeend', boxHtml);
+    const box = fieldWrap.querySelector('.inline-contact-box');
+
+    const nameInput = box.querySelector('#quick-con-name');
+    const phoneInput = box.querySelector('#quick-con-phone');
+    const addrInput = box.querySelector('#quick-con-address');
+    const provInput = box.querySelector('#quick-con-province');
+    const saveBtn = box.querySelector('#inline-con-save');
+
+    addrInput?.addEventListener('input', () => {
+      const p = detectThaiProvince(addrInput.value);
+      if(p && provInput && !provInput.value.trim()) provInput.value = p;
+    });
+
+    const closeBox = () => { box.remove(); input.focus(); };
+    box.querySelector('#inline-con-close')?.addEventListener('click', closeBox);
+    box.querySelector('#inline-con-cancel')?.addEventListener('click', closeBox);
+
+    saveBtn?.addEventListener('click', async () => {
+      const name = nameInput.value.trim();
+      const phone = phoneInput.value.trim();
+      const address = addrInput.value.trim();
+      const province = provInput.value.trim();
+
+      if(!name){
+        toast('กรุณาระบุชื่อผู้บริจาค', true);
+        nameInput.focus();
+        return;
+      }
+      if(!phone || phone.replace(/\D+/g,'').length < 9){
+        toast('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก', true);
+        phoneInput.focus();
+        return;
+      }
+
+      saveBtn.disabled = true;
+      try {
+        const payload = {
+          name,
+          phone,
+          address,
+          province: province || detectThaiProvince(address) || '',
+          type: 'donor'
+        };
+        const res = await api('record', {module:'contacts'}, 'POST', payload);
+        const newRec = res.record;
+        state.options.contacts = state.options.contacts || {};
+        state.options.contacts[newRec.id] = newRec.name;
+
+        target.value = newRec.id;
+        input.value = newRec.name + (newRec.phone ? ' (' + newRec.phone + ')' : '');
+        const clearBtn = picker.querySelector('.relation-clear');
+        clearBtn?.classList.remove('hidden');
+
+        box.remove();
+        toast(`สร้างผู้บริจาค "${newRec.name}" เรียบร้อยและเลือกให้อัตโนมัติ`);
+
+        const nextField = fieldWrap.closest('form')?.querySelector('#f_amount_satang, #f_campaign_id');
+        if(nextField) nextField.focus();
+      } catch(err) {
+        toast(err.message, true);
+        saveBtn.disabled = false;
+      }
+    });
+
+    setTimeout(() => {
+      if(!defaultName) nameInput.focus();
+      else if(!defaultPhone) phoneInput.focus();
+      else addrInput.focus();
+    }, 50);
+  }
   function wireRelationSearch(form){
+    form.querySelectorAll('.relation-quick-add-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const target = form.querySelector('#' + btn.dataset.target);
+        const searchInput = form.querySelector('.relation-search[data-target="' + btn.dataset.target + '"]');
+        const picker = searchInput?.parentElement;
+        if(picker && target && searchInput){
+          showInlineContactCreator(picker, target, searchInput, searchInput.value.trim());
+        }
+      });
+    });
+
     form.querySelectorAll('.relation-search').forEach(input=>{
-      let t;const target=$('#'+input.dataset.target);
+      let t;const target=$('#'+input.dataset.target,form);
       const picker=input.parentElement;
       const results=picker.querySelector('.relation-results');
       const clearBtn=picker.querySelector('.relation-clear');
@@ -321,11 +437,24 @@
         e.preventDefault();e.stopPropagation();
         target.value='';input.value='';syncClear();input.focus();
       });
+      results.addEventListener('mousedown',e=>e.preventDefault());
       const loadOptions=async(q)=>{
         try{
           const r=await api('options',{module:input.dataset.rel,q});
-          results.innerHTML=r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>';
+          const isContacts=(input.dataset.rel==='contacts');
+          let createBtnHtml='';
+          if(isContacts && roleAllows('contacts',true)){
+            createBtnHtml=`<div style="padding:6px;border-top:1px dashed var(--line);background:rgba(162,187,59,.07)"><button type="button" class="btn small primary relation-inline-create-btn" style="width:100%;font-size:11.5px;font-weight:800;gap:5px;justify-content:center">＋ สร้างผู้บริจาคใหม่ทันที${q?` "${esc(q)}"`:''}</button></div>`;
+          }
+          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
           results.classList.remove('hidden');
+
+          results.querySelector('.relation-inline-create-btn')?.addEventListener('click',e=>{
+            e.preventDefault();e.stopPropagation();
+            results.classList.add('hidden');
+            showInlineContactCreator(picker,target,input,q);
+          });
+
           results.querySelectorAll('[data-id]').forEach(btn=>btn.addEventListener('click',async()=>{
             target.value=btn.dataset.id;input.value=btn.dataset.name;results.classList.add('hidden');syncClear();
             if(input.dataset.rel==='donations' && btn.dataset.shipnote){
@@ -675,448 +804,6 @@
     $('#cancel-modal').onclick=closeModal;$('#user-form').onsubmit=async e=>{e.preventDefault();const d=formData(e.target);d.active=d.active==='1';if(user){d.id=user.id;d.version=user.version;}
       try{await api('users',{},user?'PUT':'POST',d);closeModal();toast('บันทึกบัญชีเรียบร้อย');render();}catch(err){toast(err.message,true);}};
   }
-  const liveSlipSession = {
-    recorder: localStorage.getItem('crm-slip-recorder') || 'มาซัง',
-    producer: localStorage.getItem('crm-slip-producer') || '',
-    slipDate: fmtIsoDate(new Date()),
-    page: localStorage.getItem('crm-slip-page') || '',
-    campaignId: '',
-    receiverId: '',
-    slipCount: 0
-  };
-  async function openLiveSlipModal(){
-    if(!roleAllows('donations', true)){
-      toast('ไม่มีสิทธิ์บันทึกข้อมูลการบริจาค', true);
-      return;
-    }
-    let campsRes = {items:[]}, rcvsRes = {items:[]}, hadsRes = {items:[]}, lotsRes = {items:[]};
-    try {
-      [campsRes, rcvsRes, hadsRes, lotsRes] = await Promise.all([
-        api('options', {module:'campaigns'}),
-        api('options', {module:'receivers'}),
-        api('options', {module:'hadeeya'}),
-        api('options', {module:'stock_lots'})
-      ]);
-    } catch(e) {
-      toast('ไม่สามารถโหลดข้อมูลตัวเลือกได้: ' + e.message, true);
-      return;
-    }
-
-    const campList = campsRes.items || [];
-    const rcvList = rcvsRes.items || [];
-    const hadList = hadsRes.items || [];
-    const lotList = lotsRes.items || [];
-
-    if(!liveSlipSession.campaignId && campList.length > 0){
-      liveSlipSession.campaignId = campList[0].id;
-    }
-
-    const campOptions = campList.map(c => `<option value="${esc(c.id)}" ${liveSlipSession.campaignId===c.id?'selected':''}>${esc(c.name)}</option>`).join('');
-    const rcvOptions = rcvList.map(r => `<option value="${esc(r.id)}" ${liveSlipSession.receiverId===r.id?'selected':''}>${esc(r.name)}</option>`).join('');
-    const hadOptions = `<option value="">— เลือกของฮาดียะฮ์ —</option>` + hadList.map(h => `<option value="${esc(h.id)}">${esc(h.name)}</option>`).join('');
-
-    const html = `
-      <form id="live-slip-form" class="slip-grid" onsubmit="return false;">
-        <div class="slip-box">
-          <div class="slip-box-title">
-            <span>📋 ข้อมูลหัวใบงาน TV สด (บันทึกครั้งเดียว จำค่าไว้ตลอดการคีย์ต่อเนื่อง)</span>
-            <span class="pill green" id="slip-count-badge">คีย์ในรอบนี้: ${num(liveSlipSession.slipCount)} ใบ</span>
-          </div>
-          <div class="form-grid" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;">
-            <label class="form-field">
-              <span class="field-title">ผู้บันทึก (Recorder) <span class="req-star">*</span></span>
-              <input id="slip-recorder" value="${esc(liveSlipSession.recorder)}" placeholder="เช่น มาซัง" required autocomplete="off">
-            </label>
-            <label class="form-field">
-              <span class="field-title">ชื่อโปรดิวเซอร์</span>
-              <input id="slip-producer" value="${esc(liveSlipSession.producer)}" placeholder="เช่น ทีมรายการสด" autocomplete="off">
-            </label>
-            <label class="form-field">
-              <span class="field-title">วันที่ออกอากาศ <span class="req-star">*</span></span>
-              <input type="date" id="slip-date" value="${esc(liveSlipSession.slipDate)}" required>
-            </label>
-            <label class="form-field">
-              <span class="field-title">แผ่นที่</span>
-              <input id="slip-page" value="${esc(liveSlipSession.page)}" placeholder="เช่น 1, 2…" autocomplete="off">
-            </label>
-            <label class="form-field">
-              <span class="field-title">โครงการ <span class="req-star">*</span></span>
-              <select id="slip-campaign" required>${campOptions}</select>
-            </label>
-            <label class="form-field">
-              <span class="field-title">ผู้รับแจ้ง / ช่องทาง</span>
-              <select id="slip-receiver"><option value="">— ตามรายการสด / ไม่ระบุ —</option>${rcvOptions}</select>
-            </label>
-          </div>
-        </div>
-
-        <div class="slip-box">
-          <div class="slip-box-title">
-            <span>📞 ข้อมูลผู้บริจาค (ค้นหาเบอร์โทรศัพท์อัตโนมัติ)</span>
-            <small class="muted" style="text-transform:none">ตรวจสอบประวัติ & แนะนำที่อยู่เดิมทันที</small>
-          </div>
-          <div style="display:grid; grid-template-columns: 1fr auto; gap: 10px; align-items: flex-end;">
-            <label class="form-field" style="margin:0">
-              <span class="field-title">เบอร์โทรศัพท์ผู้บริจาค <span class="req-star">*</span> <small class="muted">(เช่น 084 750 3902 หรือ 0847503902)</small></span>
-              <input id="slip-phone" type="tel" placeholder="08X-XXX-XXXX" autocomplete="off" autofocus style="font-size:18px;font-weight:750;letter-spacing:0.04em">
-            </label>
-            <button type="button" class="btn" id="slip-lookup-btn" style="min-height:42px;padding:0 18px">⌕ ตรวจสอบเบอร์</button>
-          </div>
-
-          <div id="slip-donor-result" class="slip-donor-card" style="background:var(--bg); border:1px dashed var(--line); color:var(--muted)">
-            💡 พิมพ์เบอร์โทรศัพท์ ระบบจะตรวจสอบทันที หากเป็นผู้บริจาคเดิมจะดึงชื่อ-ที่อยู่และประวัติขึ้นมาให้อัตโนมัติโดยไม่ต้องพิมพ์ใหม่
-          </div>
-
-          <div id="slip-contact-edit-box" class="form-grid" style="margin-top:10px; display:none; grid-template-columns: 1.2fr 2fr 1fr; gap:10px;">
-            <label class="form-field">
-              <span class="field-title">ชื่อ-นามสกุล / นามแฝง</span>
-              <input id="slip-name" placeholder="ผู้บริจาคไม่ประสงค์ออกนาม">
-            </label>
-            <label class="form-field">
-              <span class="field-title">ที่อยู่จัดส่งพัสดุ <small class="muted">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</small></span>
-              <input id="slip-address" placeholder="บ้านเลขที่ หมู่ ซอย ถนน ตำบล อำเภอ">
-            </label>
-            <label class="form-field">
-              <span class="field-title">จังหวัด</span>
-              <input id="slip-province" placeholder="เช่น กรุงเทพฯ">
-            </label>
-          </div>
-        </div>
-
-        <div class="slip-box">
-          <div class="slip-box-title">
-            <span>💰 ยอดเงิน & ตัวเลือกการกระจายบุญ</span>
-          </div>
-          <div class="form-grid" style="grid-template-columns: 1fr; gap: 12px;">
-            <div>
-              <label class="form-field">
-                <span class="field-title">จำนวนเงินบริจาค (บาท) <span class="req-star">*</span></span>
-                <input id="slip-amount" type="number" step="1" min="1" placeholder="เช่น 2000" style="font-size:22px; font-weight:800; color:var(--accent-text);" required>
-              </label>
-              <div class="slip-quick-amounts">
-                <span style="font-size:11.5px;color:var(--muted);align-self:center;margin-right:4px">ยอดด่วน:</span>
-                <button type="button" class="slip-quick-btn" data-amt="500">฿500</button>
-                <button type="button" class="slip-quick-btn" data-amt="1000">฿1,000</button>
-                <button type="button" class="slip-quick-btn" data-amt="2000">฿2,000</button>
-                <button type="button" class="slip-quick-btn" data-amt="3000">฿3,000</button>
-                <button type="button" class="slip-quick-btn" data-amt="5000">฿5,000</button>
-                <button type="button" class="slip-quick-btn" data-amt="10000">฿10,000</button>
-              </div>
-            </div>
-
-            <div>
-              <label class="field-title" style="display:block;margin-bottom:4px">ตัวเลือกการกระจายบุญ (ตรงตามใบงาน 10 ตัวเลือก)</label>
-              <div class="slip-periods-grid">
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="once" checked> <span>ครั้งเดียว / ปกติ</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="all_year"> <span>บริจาคตลอดทั้งปี</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="30days"> <span>แบ่ง 30 วัน</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="30days_1000m"> <span>30 วัน 1000 เดือน</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="even_days"> <span>แบ่ง วันคู่</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="odd_days"> <span>แบ่ง วันคี่</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="best_10days"> <span>10 วันอันประเสริฐ</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="last_10days"> <span>10 วันสุดท้าย</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="day"> <span>กลางวัน</span></label>
-                <label class="slip-period-label"><input type="radio" name="slip_dist" value="night"> <span>กลางคืน</span></label>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="slip-box">
-          <div class="slip-box-title">
-            <span>🎁 ของฮาดียะฮ์ (ของที่ระลึก)</span>
-          </div>
-          <div class="slip-hadiyah-selector" id="slip-had-selector">
-            <div class="slip-had-option active" data-mode="none">
-              <span>🚫</span>
-              <strong>ไม่รับของฮาดียะฮ์</strong>
-              <small class="muted">ไม่ต้องการรับของที่ระลึก</small>
-            </div>
-            <div class="slip-had-option" data-mode="receive">
-              <span>🎁</span>
-              <strong>รับของฮาดียะฮ์</strong>
-              <small class="muted">ตัดสต็อก FIFO + ส่งพัสดุ</small>
-            </div>
-            <div class="slip-had-option" data-mode="pending">
-              <span>⏳</span>
-              <strong>รอแจ้ง / ให้โทรสอบถาม</strong>
-              <small class="muted">สร้างงานให้ Call Center โทรหา</small>
-            </div>
-          </div>
-
-          <div id="slip-had-subform" style="display:none; padding-top:12px; border-top:1px dashed var(--line);">
-            <div class="form-grid" style="grid-template-columns: 2fr 1fr; gap:10px;">
-              <label class="form-field">
-                <span class="field-title">เลือกรายการของฮาดียะฮ์ <span class="req-star">*</span></span>
-                <select id="slip-had-id">${hadOptions}</select>
-              </label>
-              <label class="form-field">
-                <span class="field-title">จำนวน (ชิ้น) <span class="req-star">*</span></span>
-                <input type="number" id="slip-had-qty" min="1" value="1">
-              </label>
-            </div>
-            <div id="slip-stock-hint" class="item-small" style="margin-top:6px; color:var(--accent-text)"></div>
-          </div>
-        </div>
-
-        <div class="slip-box">
-          <label class="form-field" style="margin:0">
-            <span class="field-title">หมายเหตุเพิ่มเติม (ถ้ามี)</span>
-            <input id="slip-note" placeholder="เช่น ขอรับเป็นนาฬิกาแขวนผนัง / สลิปโอนผ่านกสิกรไทย">
-          </label>
-        </div>
-
-        <div class="form-actions" style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px">
-          <div class="item-small muted">
-            💡 กด <strong>Enter</strong> ในช่องยอดเงิน หรือคลิก <strong>⚡ บันทึก & คีย์คนถัดไป</strong> เพื่อพิมพ์ใบงานต่อเนื่อง
-          </div>
-          <div style="display:flex; gap:8px">
-            <button type="button" class="btn" id="slip-cancel-btn">ปิด</button>
-            <button type="button" class="btn" id="slip-save-close-btn">บันทึก & ปิด</button>
-            <button type="button" class="btn primary" id="slip-save-next-btn" style="min-height:38px;padding:0 18px;font-weight:800">
-              ⚡ บันทึก & คีย์คนถัดไป
-            </button>
-          </div>
-        </div>
-      </form>
-    `;
-
-    modal('⚡ คีย์ใบงาน TV สด (One-Stop Live Slip Entry)', html, true);
-
-    document.querySelectorAll('.slip-quick-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        $('#slip-amount').value = btn.dataset.amt;
-        document.querySelectorAll('.slip-quick-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        $('#slip-amount').focus();
-      });
-    });
-
-    let currentHadMode = 'none';
-    const setHadMode = mode => {
-      currentHadMode = mode;
-      document.querySelectorAll('.slip-had-option').forEach(el => {
-        el.classList.toggle('active', el.dataset.mode === mode);
-      });
-      $('#slip-had-subform').style.display = (mode === 'receive') ? 'block' : 'none';
-    };
-    document.querySelectorAll('.slip-had-option').forEach(el => {
-      el.addEventListener('click', () => setHadMode(el.dataset.mode));
-    });
-
-    const updateStockHint = () => {
-      const hadId = $('#slip-had-id').value;
-      if(!hadId){ $('#slip-stock-hint').textContent = ''; return; }
-      const matchingLots = lotList.filter(l => l.hadeeya_id === hadId);
-      const totalStock = matchingLots.reduce((acc, l) => acc + (parseInt(l.quantity, 10) || 0), 0);
-      if(totalStock > 0){
-        $('#slip-stock-hint').innerHTML = `📦 สต็อกพร้อมส่งรวม: <strong>${num(totalStock)}</strong> ชิ้น (ตัดสต็อกแบบ FIFO อัตโนมัติจากล็อตเก่าสุดที่มีของ)`;
-      } else {
-        $('#slip-stock-hint').innerHTML = `⚠️ <span style="color:var(--danger)">สินค้าหมดสต็อก</span> (ระบบจะสร้างใบเตรียมจัดส่ง รอสินค้าเข้าคลัง)`;
-      }
-    };
-    $('#slip-had-id')?.addEventListener('change', updateStockHint);
-
-    let lookupTimer = null;
-    let lastLookedPhone = '';
-    const performPhoneLookup = async (force = false) => {
-      const phoneRaw = ($('#slip-phone')?.value || '').trim();
-      const digits = phoneRaw.replace(/\D+/g, '');
-      if(!force && (digits.length < 9 || digits === lastLookedPhone)) return;
-      lastLookedPhone = digits;
-      if(digits.length < 8){
-        $('#slip-donor-result').innerHTML = '💡 พิมพ์เบอร์โทรศัพท์ (อย่างน้อย 9-10 หลัก) เพื่อตรวจสอบประวัติ';
-        $('#slip-donor-result').className = 'slip-donor-card';
-        $('#slip-contact-edit-box').style.display = 'none';
-        return;
-      }
-      $('#slip-donor-result').innerHTML = '⏳ กำลังตรวจสอบเบอร์โทรศัพท์…';
-      $('#slip-donor-result').className = 'slip-donor-card';
-      try {
-        const res = await api('phone-lookup', { phone: phoneRaw });
-        if(res.found && res.contact){
-          const c = res.contact;
-          const hasAddr = !!(c.address && c.address.trim());
-          const vipBadge = (c.is_vip || ((res.donations_count || 0) >= 3)) ? ' <span class="pill green">VIP สมาชิกประจำ</span>' : '';
-          const hadHistory = (res.recent_shipments && res.recent_shipments.length > 0)
-            ? res.recent_shipments.map(s => esc(s.hadeeya_name || s.hadeeya_id)).join(', ')
-            : '—';
-
-          $('#slip-donor-result').className = 'slip-donor-card found';
-          $('#slip-donor-result').innerHTML = `
-            <div style="flex:1">
-              <div style="font-size:14px; font-weight:800; display:flex; align-items:center; gap:8px;">
-                <span>✓ พบผู้บริจาค: ${esc(c.name || 'ไม่ระบุชื่อ')}</span>
-                ${vipBadge}
-              </div>
-              <div style="margin-top:4px; font-size:12px; color:var(--text);">
-                ยอดสะสมตลอดชีพ: <strong>${money(res.lifetime_satang || 0)}</strong> | บริจาคแล้ว: <strong>${num(res.donations_count || 0)}</strong> ครั้ง
-              </div>
-              <div style="margin-top:3px; font-size:12px;">
-                ${hasAddr 
-                  ? `📍 <strong>ที่อยู่จัดส่ง:</strong> ${esc(c.address)}${c.province ? ' จ.' + esc(c.province) : ''}`
-                  : `⚠️ <strong style="color:var(--danger)">ยังไม่มีที่อยู่จัดส่งในระบบ</strong> (หากขอรับฮาดียะห์ ระบบจะส่งงานให้ Call Center โทรหาอัตโนมัติ)`}
-              </div>
-              <div style="margin-top:3px; font-size:11.5px; color:var(--muted)">
-                🎁 ประวัติฮาดียะฮ์เดิม: ${hadHistory}
-              </div>
-            </div>
-            <button type="button" class="btn small" id="slip-edit-contact-toggle" style="align-self:flex-start">
-              ✏️ แก้ไขชื่อ/ที่อยู่
-            </button>
-          `;
-          $('#slip-name').value = c.name || '';
-          $('#slip-address').value = c.address || '';
-          $('#slip-province').value = c.province || '';
-          $('#slip-contact-edit-box').style.display = 'none';
-
-          $('#slip-edit-contact-toggle')?.addEventListener('click', () => {
-            const box = $('#slip-contact-edit-box');
-            box.style.display = (box.style.display === 'none') ? 'grid' : 'none';
-          });
-        } else {
-          $('#slip-donor-result').className = 'slip-donor-card new';
-          $('#slip-donor-result').innerHTML = `
-            <div>
-              <div style="font-weight:800; font-size:13px; color:var(--text);">
-                ⚡ เบอร์ใหม่ (ยังไม่มีในระบบ)
-              </div>
-              <div style="font-size:11.5px; color:var(--muted); margin-top:2px;">
-                สามารถระบุชื่อด้านล่างได้ หรือเว้นว่างที่อยู่ไว้เพื่อให้ทีม Call Center โทรสอบถามภายหลัง
-              </div>
-            </div>
-          `;
-          $('#slip-name').value = '';
-          $('#slip-address').value = '';
-          $('#slip-province').value = '';
-          $('#slip-contact-edit-box').style.display = 'grid';
-        }
-      } catch(err) {
-        $('#slip-donor-result').innerHTML = '⚠️ เกิดข้อผิดพลาดในการค้นหา: ' + esc(err.message);
-      }
-    };
-
-    $('#slip-phone')?.addEventListener('input', () => {
-      clearTimeout(lookupTimer);
-      lookupTimer = setTimeout(() => performPhoneLookup(false), 250);
-    });
-    $('#slip-phone')?.addEventListener('blur', () => performPhoneLookup(false));
-    $('#slip-lookup-btn')?.addEventListener('click', () => performPhoneLookup(true));
-
-    const submitSlip = async (andNext = false) => {
-      const phone = ($('#slip-phone')?.value || '').trim();
-      const amount = ($('#slip-amount')?.value || '').trim();
-      const recorder = ($('#slip-recorder')?.value || '').trim();
-      const producer = ($('#slip-producer')?.value || '').trim();
-      const slipDate = ($('#slip-date')?.value || '').trim();
-      const page = ($('#slip-page')?.value || '').trim();
-      const campaignId = ($('#slip-campaign')?.value || '').trim();
-      const receiverId = ($('#slip-receiver')?.value || '').trim();
-      const distEl = document.querySelector('input[name="slip_dist"]:checked');
-      const distPeriod = distEl ? distEl.value : 'once';
-      const note = ($('#slip-note')?.value || '').trim();
-
-      const name = ($('#slip-name')?.value || '').trim();
-      const address = ($('#slip-address')?.value || '').trim();
-      const province = ($('#slip-province')?.value || '').trim();
-
-      const hadId = ($('#slip-had-id')?.value || '').trim();
-      const hadQty = parseInt($('#slip-had-qty')?.value || '1', 10);
-
-      if(phone.replace(/\D+/g, '').length < 9){
-        toast('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก', true);
-        $('#slip-phone')?.focus();
-        return;
-      }
-      if(!amount || isNaN(amount) || Number(amount) <= 0){
-        toast('กรุณาระบุจำนวนเงินบริจาคที่ถูกต้อง', true);
-        $('#slip-amount')?.focus();
-        return;
-      }
-      if(currentHadMode === 'receive' && !hadId){
-        toast('กรุณาเลือกรายการของฮาดียะฮ์ที่ต้องการรับ', true);
-        $('#slip-had-id')?.focus();
-        return;
-      }
-
-      liveSlipSession.recorder = recorder;
-      liveSlipSession.producer = producer;
-      liveSlipSession.slipDate = slipDate;
-      liveSlipSession.page = page;
-      liveSlipSession.campaignId = campaignId;
-      liveSlipSession.receiverId = receiverId;
-      localStorage.setItem('crm-slip-recorder', recorder);
-      localStorage.setItem('crm-slip-producer', producer);
-      localStorage.setItem('crm-slip-page', page);
-
-      const saveBtn = andNext ? $('#slip-save-next-btn') : $('#slip-save-close-btn');
-      if(saveBtn) saveBtn.disabled = true;
-
-      try {
-        const payload = {
-          phone,
-          amount,
-          slip_recorder: recorder,
-          slip_producer: producer,
-          slip_date: slipDate,
-          slip_page: page,
-          campaign_id: campaignId,
-          receiver_id: receiverId,
-          distribution_period: distPeriod,
-          note,
-          name,
-          address,
-          province,
-          hadiyah_mode: currentHadMode,
-          hadiyah_id: hadId,
-          hadiyah_qty: hadQty
-        };
-
-        const res = await api('live-slip', {}, 'POST', payload);
-        liveSlipSession.slipCount++;
-        toast(res.message || 'บันทึกใบรับบริจาคเรียบร้อย');
-
-        if(andNext){
-          $('#slip-count-badge').textContent = `คีย์ในรอบนี้: ${num(liveSlipSession.slipCount)} ใบ`;
-          $('#slip-phone').value = '';
-          $('#slip-amount').value = '';
-          $('#slip-note').value = '';
-          $('#slip-name').value = '';
-          $('#slip-address').value = '';
-          $('#slip-province').value = '';
-          $('#slip-donor-result').innerHTML = '💡 พิมพ์เบอร์โทรศัพท์เพื่อคีย์ใบงานถัดไป';
-          $('#slip-donor-result').className = 'slip-donor-card';
-          $('#slip-contact-edit-box').style.display = 'none';
-          document.querySelectorAll('.slip-quick-btn').forEach(b => b.classList.remove('active'));
-          setHadMode('none');
-          const firstDist = document.querySelector('input[name="slip_dist"][value="once"]');
-          if(firstDist) firstDist.checked = true;
-          lastLookedPhone = '';
-          setTimeout(() => $('#slip-phone')?.focus(), 60);
-        } else {
-          closeModal();
-          render();
-        }
-      } catch(err) {
-        toast(err.message, true);
-      } finally {
-        if(saveBtn) saveBtn.disabled = false;
-      }
-    };
-
-    $('#slip-save-next-btn')?.addEventListener('click', () => submitSlip(true));
-    $('#slip-save-close-btn')?.addEventListener('click', () => submitSlip(false));
-    $('#slip-cancel-btn')?.addEventListener('click', closeModal);
-
-    $('#slip-amount')?.addEventListener('keydown', e => {
-      if(e.key === 'Enter'){
-        e.preventDefault();
-        submitSlip(true);
-      }
-    });
-
-    setTimeout(() => $('#slip-phone')?.focus(), 120);
-  }
   async function auditPage(){const r=await api('audit',{page:state.page});$('#page-content').innerHTML=header('AUDIT / HISTORY','ประวัติการทำงาน','บันทึกการเปลี่ยนแปลงข้อมูลย้อนหลัง')+`<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>เวลา UTC</th><th>ผู้ทำรายการ</th><th>โมดูล</th><th>กิจกรรม</th><th>อ้างอิง</th></tr></thead><tbody>${r.items.map(a=>`<tr><td>${esc(a.created_at)}</td><td>${esc(a.actor_name)}</td><td>${esc(a.module)}</td><td><span class="pill">${esc(a.action)}</span></td><td class="cell-muted">${esc(a.record_id)}</td></tr>`).join('')}</tbody></table></div><div class="table-footer"><span>${num(r.total)} รายการ</span><div class="pagination"><button class="btn small" id="prev-page" ${r.page===1?'disabled':''}>ก่อน</button><button class="btn small" id="next-page" ${r.page===r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;$('#prev-page').onclick=()=>{state.page--;render()};$('#next-page').onclick=()=>{state.page++;render()};}
   const aiModelList = [
     ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite · ตัวหลัก (ฟรีวันละ 500 ครั้ง · เร็ว ฉลาดพอดี)'],
@@ -1186,19 +873,22 @@
     $('#page-content').innerHTML=header('PREFERENCES / SETTINGS','ตั้งค่าระบบส่วนตัว','เปลี่ยนธีม รหัสผ่าน สำรองฐานข้อมูล และตั้งค่า Gemini AI ช่วยค้นหา')+
       `<div class="dashboard-grid">
         <section class="panel"><h3>ธีมสีแอปพลิเคชัน</h3><p class="muted">ระบบรองรับธีมดั้งเดิม Modern Navy และ Dark Mode</p><div class="form-grid"><button type="button" class="btn ${t==='premium'?'primary':''}" data-theme="premium">◉ Premium Navy + Olive</button><button type="button" class="btn ${t==='classic'?'primary':''}" data-theme="classic">◉ Classic Green + White</button><button type="button" class="btn ${t==='dark'?'primary':''}" data-theme="dark">◉ Dark Professional</button></div></section>
-        <section class="panel"><h3>เปลี่ยนรหัสผ่าน</h3><div id="password-form" class="stack" style="display:grid;gap:15px"><label class="form-field"><span class="field-title">รหัสผ่านปัจจุบัน <span class="req-star">*</span></span><input name="current_password" type="password" placeholder="กรอกรหัสผ่านที่ใช้งานอยู่ในปัจจุบัน…" autocomplete="current-password"></label><label class="form-field"><span class="field-title">รหัสผ่านใหม่ (12 ตัวขึ้นไป) <span class="req-star">*</span></span><input name="new_password" type="password" minlength="12" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 12 ตัวอักษร…" autocomplete="new-password"></label><button type="button" id="save-password-btn" class="btn primary">บันทึกรหัสผ่านใหม่</button></div></section>
+        <section class="panel"><h3>เปลี่ยนรหัสผ่าน</h3><div id="password-form" class="stack" style="display:grid;gap:14px"><label class="form-field"><span class="field-title">รหัสผ่านปัจจุบัน <span class="req-star">*</span></span><input name="current_password" type="password" placeholder="กรอกรหัสผ่านที่ใช้งานอยู่ในปัจจุบัน…" autocomplete="current-password"></label><label class="form-field"><span class="field-title">รหัสผ่านใหม่ (12 ตัวขึ้นไป) <span class="req-star">*</span></span><input name="new_password" type="password" minlength="12" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 12 ตัวอักษร…" autocomplete="new-password"></label><div class="form-actions" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><small class="muted">🔒 รหัสผ่านต้องมีความยาว 12 ตัวขึ้นไป</small><button type="button" id="save-password-btn" class="btn primary" style="font-weight:800;padding:0 18px">✓ บันทึกรหัสผ่านใหม่</button></div></div></section>
       </div>
       <section class="panel" style="margin-bottom:18px">
         <div class="panel-head"><div><h3>✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ</h3><small>ช่วยให้พิมพ์ค้นหาหรือสั่งเปิดหน้าต่างๆ ได้แม่นยำแม้พิมพ์สะกดผิด หรือพิมพ์คำใกล้เคียง</small></div><span id="ai-status-pill" class="pill ${aiCfg.enabled&&aiCfg.has_key?'green':'yellow'}">${aiCfg.enabled&&aiCfg.has_key?'✦ เปิดใช้งาน AI แล้ว':'ยังไม่ได้ตั้งค่า API Key'}</span></div>
         ${aiCfg.can_edit?`<div id="ai-config-form" class="stack" style="display:grid;gap:18px">
           <div class="form-grid">
             <div>
-              <div class="field-label-row">
+              <div class="field-label-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
                 <label for="ai-key-input" style="margin:0">Gemini API Key</label>
-                <div id="ai-key-badge" class="key-badge ${aiCfg.has_key?'saved':'empty'}">
-                  <span class="key-badge-dot"></span>
-                  <span class="key-badge-title">${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
-                  <code id="ai-masked-label">${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+                <div style="display:flex;align-items:center;gap:6px">
+                  <div id="ai-key-badge" class="key-badge ${aiCfg.has_key?'saved':'empty'}">
+                    <span class="key-badge-dot"></span>
+                    <span class="key-badge-title">${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
+                    <code id="ai-masked-label">${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+                  </div>
+                  ${aiCfg.has_key?`<button type="button" class="btn small danger clear-ai-key-btn" title="ลบ API Key ปัจจุบันออกจากระบบ" style="padding:2px 8px;min-height:24px;font-size:11px;font-weight:750">🗑️ ลบ Key ปัจจุบัน</button>`:''}
                 </div>
               </div>
               <input id="ai-key-input" name="api_key" type="text" placeholder="${aiCfg.has_key?'เว้นว่างไว้หากไม่ต้องการเปลี่ยนคีย์เดิม':'วาง API Key ที่นี่ (เช่น AIzaSy...)'}" autocomplete="off" spellcheck="false">
@@ -1309,10 +999,12 @@
       }catch(err){toast(err.message,true);}
       finally{btn.disabled=false;}
     });
-    $('#clear-ai-key')?.addEventListener('click',async()=>{
-      if(!confirm('ยืนยันการลบ Gemini API Key ออกจากระบบ?'))return;
+    const handleClearKey = async () => {
+      if(!confirm('ยืนยันการลบ API Key ปัจจุบันออกจากระบบหรือไม่?')) return;
       try{await api('ai-config',{},'POST',{clear_key:true,enabled:false});toast('ลบ API Key เรียบร้อยแล้ว');render();}catch(err){toast(err.message,true);}
-    });
+    };
+    $('#clear-ai-key')?.addEventListener('click', handleClearKey);
+    document.querySelectorAll('.clear-ai-key-btn').forEach(btn => btn.addEventListener('click', handleClearKey));
   }
   async function openAiConfigModal(){
     let aiCfg={enabled:false,has_key:false,masked_key:'',model:'gemini-3.5-flash-lite',auto_fallback:true,usage:{},can_edit:state.user?.role==='admin'};
@@ -1322,12 +1014,15 @@
     modal('✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ',`<div id="modal-ai-form" class="stack" style="display:grid;gap:18px">
       <div class="ai-box"><div class="ai-box-head"><span>✦ AI Smart Search & Navigation</span><span>${aiCfg.enabled&&aiCfg.has_key?'เปิดใช้งานแล้ว':'ยังไม่ตั้งค่า'}</span></div><div class="ai-box-text">เมื่อเปิดใช้งาน ระบบจะใช้ Gemini ช่วยเดาคำค้นหาที่พิมพ์ผิด (เช่น พิมพ์ "บริจาก", "สมาชิค", "ส่งของ") แล้วพาไปยังหน้าที่ถูกต้องหรือเปิดข้อมูลให้ทันที${curUsage?`<br><strong style="color:var(--accent-text)">📊 โควต้าวันนี้ (${esc(aiCfg.model)}): ใช้ไป ${num(curUsage.rpd_used)} / ${num(curUsage.rpd_limit)} ครั้ง (คงเหลือ ${num(curUsage.rpd_remaining)} ครั้ง)</strong>`:''}</div></div>
       <div>
-        <div class="field-label-row">
+        <div class="field-label-row" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
           <label for="m-ai-key" style="margin:0">Gemini API Key</label>
-          <div class="key-badge ${aiCfg.has_key?'saved':'empty'}">
-            <span class="key-badge-dot"></span>
-            <span>${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
-            <code>${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+          <div style="display:flex;align-items:center;gap:6px">
+            <div class="key-badge ${aiCfg.has_key?'saved':'empty'}">
+              <span class="key-badge-dot"></span>
+              <span>${aiCfg.has_key?'คีย์ปัจจุบัน:':'สถานะ:'}</span>
+              <code>${aiCfg.has_key?esc(aiCfg.masked_key):'ยังไม่ได้ตั้งค่า'}</code>
+            </div>
+            ${aiCfg.has_key?`<button type="button" class="btn small danger" id="m-clear-ai-key" style="padding:1px 8px;min-height:24px;font-size:11px;font-weight:750">🗑️ ลบ Key ปัจจุบัน</button>`:''}
           </div>
         </div>
         <input id="m-ai-key" name="api_key" type="text" placeholder="${aiCfg.has_key?'เว้นว่างไว้หากไม่ต้องการเปลี่ยนคีย์':'วาง API Key ที่นี่ (เช่น AIzaSy...)'}" autocomplete="off" spellcheck="false">
@@ -1345,6 +1040,17 @@
       <div class="form-actions" style="margin-top:10px"><button type="button" class="btn" id="cancel-modal">ยกเลิก</button><button type="button" id="m-save-ai" class="btn primary">✦ บันทึก API Key</button></div>
     </div>`);
     $('#cancel-modal').onclick=closeModal;
+    $('#m-clear-ai-key')?.addEventListener('click', async () => {
+      if(!confirm('ยืนยันการลบ API Key ปัจจุบันออกจากระบบหรือไม่?')) return;
+      try {
+        await api('ai-config', {}, 'POST', {clear_key: true, enabled: false});
+        closeModal();
+        toast('ลบ API Key เรียบร้อยแล้ว');
+        if(state.module === 'settings') render();
+      } catch(err) {
+        toast(err.message, true);
+      }
+    });
     $('#m-save-ai').onclick=async()=>{
       const d={
         api_key:$('#m-ai-key')?.value||'',
@@ -1552,8 +1258,6 @@
     makeNav();wireGlobalSearch();$('#logout-btn').onclick=async()=>{try{await api('logout',{},'POST',{});location.href=location.pathname;}catch(e){toast(e.message,true);}};
     $('#menu-open').onclick=()=>{$('#sidebar').classList.add('show');$('#overlay').classList.add('show');};$('#sidebar-close').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;
     $('#modal-close').onclick=closeModal;$('#modal-backdrop').addEventListener('click',e=>{if(e.target.id==='modal-backdrop')closeModal();});
-    $('#top-live-slip-btn')?.addEventListener('click',openLiveSlipModal);
-    document.addEventListener('click',e=>{const b=e.target.closest('[data-action="open-live-slip"]');if(b){e.preventDefault();openLiveSlipModal();}});
     $('#theme-toggle').onclick=()=>{const themes=['premium','classic','dark'];const i=themes.indexOf(localStorage.getItem('crm-theme')||'premium');setTheme(themes[(i+1)%3]);};
     window.addEventListener('popstate',()=>{state.module=new URLSearchParams(location.search).get('module')||'dashboard';state.page=1;makeNav();render();});
     window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
