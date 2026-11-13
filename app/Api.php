@@ -84,8 +84,6 @@ final class Api {
                     $this->contactProfile();break;
                 case 'phone-lookup':
                     $this->phoneLookup();break;
-                case 'live-slip':
-                    $this->liveSlip($method);break;
                 case 'db-info':
                     $this->dbInfo();break;
                 case 'backup-download':
@@ -101,7 +99,7 @@ final class Api {
                 case 'users': $this->users($method);break;
                 case 'inventory': $this->inventory($method);break;
                 case 'audit':
-                    $this->auth->require('audit');$r=$this->store->listing('audit',(string)($_GET['q']??''),[],max(1,(int)($_GET['page']??1)),25);crm_json($r);
+                    $this->audit($method);break;
                 case 'export': $this->export();break;
                 case 'change-password':$this->changePassword($method);break;
                 case 'upload':$this->upload($method);break;
@@ -572,10 +570,68 @@ final class Api {
         header('Content-Length: '.filesize($path));
         header('Cache-Control: private, no-store');readfile($path);exit;
     }
+    // [DEV-FEATURE] Toggle audit logging to save disk space
+    private ?bool $auditEnabled = null;
+
+    private function isAuditEnabled(): bool {
+        if ($this->auditEnabled !== null) {
+            return $this->auditEnabled;
+        }
+        $cfg = $this->store->read('settings', 'audit_config');
+        $this->auditEnabled = ($cfg === null) ? true : (bool)($cfg['enabled'] ?? true);
+        return $this->auditEnabled;
+    }
+
     private function auditChange(string $module,string $id,string $action): array {
+        if (!$this->isAuditEnabled()) {
+            return [];
+        }
         $actor=$this->auth->current();$now=crm_now();$uid=crm_id('aud');
         $record=['id'=>$uid,'created_at'=>$now,'updated_at'=>$now,'version'=>1,'deleted_at'=>null,'actor_id'=>$actor['id']??'system','actor_name'=>$actor['name']??'System','module'=>$module,'record_id'=>$id,'action'=>$action,'ip_hash'=>hash('sha256',($_SERVER['REMOTE_ADDR']??'cli'))];
         return ['collection'=>'audit','id'=>$uid,'record'=>$record,'summary'=>$record];
+    }
+
+    private function audit(string $method): never {
+        $this->auth->require('audit');
+        if ($method === 'POST') {
+            $me = $this->auth->current();
+            if (($me['role'] ?? '') !== 'admin' && !$this->auth->can('audit', 'write')) {
+                crm_json(['error' => 'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถเปลี่ยนการตั้งค่านี้ได้'], 403);
+            }
+            $body = crm_input();
+            $action = trim((string)($body['action'] ?? 'toggle'));
+            if ($action === 'clear') {
+                $pdo = $this->store->pdo();
+                $pdo->exec("DELETE FROM records WHERE collection = 'audit'");
+                $pdo->exec("DELETE FROM cache WHERE `key` LIKE 'summary:audit%'");
+                $pdo->exec('PRAGMA wal_checkpoint(TRUNCATE)');
+                $pdo->exec('VACUUM');
+                crm_json(['ok' => true, 'message' => 'ล้างประวัติการทำงานทั้งหมดและคืนพื้นที่ฐานข้อมูลเรียบร้อย']);
+            }
+            $newEnabled = isset($body['enabled']) ? (bool)$body['enabled'] : !$this->isAuditEnabled();
+            $now = crm_now();
+            $rec = [
+                'id' => 'audit_config',
+                'version' => 1,
+                'created_at' => $now,
+                'updated_at' => $now,
+                'deleted_at' => null,
+                'enabled' => $newEnabled,
+                'updated_by' => $me['name'] ?? 'System',
+            ];
+            $this->store->transact([
+                ['collection' => 'settings', 'id' => 'audit_config', 'record' => $rec, 'summary' => $rec]
+            ]);
+            $this->auditEnabled = $newEnabled;
+            crm_json([
+                'ok' => true,
+                'enabled' => $newEnabled,
+                'message' => $newEnabled ? 'เปิดการบันทึกประวัติการทำงานตามปกติแล้ว' : 'ปิดการบันทึกประวัติการทำงานชั่วคราวแล้ว (โหมดพัฒนา)'
+            ]);
+        }
+        $r = $this->store->listing('audit', (string)($_GET['q'] ?? ''), [], max(1, (int)($_GET['page'] ?? 1)), 25);
+        $r['enabled'] = $this->isAuditEnabled();
+        crm_json($r);
     }
     private function dashboard(): array {
         $dateFrom=isset($_GET['date_from'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_from'])?(string)$_GET['date_from']:'';
@@ -790,334 +846,6 @@ final class Api {
             'recent_donations'=>array_slice($donations,0,3),
             'recent_shipments'=>array_slice($shipments,0,3),
         ]);
-    }
-    private function liveSlip(string $method): never {
-        if($method!=='POST')crm_json(['error'=>'Method not allowed'],405);
-        $this->auth->require('donations','write');
-        $body=crm_input();
-
-        $rawPhone=trim((string)($body['phone']??''));
-        $digits=preg_replace('/\D+/','',$rawPhone)??'';
-        if(strlen($digits)<9){
-            throw new \InvalidArgumentException('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก');
-        }
-        $formattedPhone=Schema::formatPhone($rawPhone);
-
-        $rawAmount=$body['amount']??'';
-        if($rawAmount===''||!is_numeric($rawAmount)||(float)$rawAmount<=0){
-            throw new \InvalidArgumentException('กรุณาระบุจำนวนเงินบริจาคที่ถูกต้อง');
-        }
-        $amountSatang=(int)round((float)$rawAmount*100);
-
-        $now=crm_now();
-        $actorId=$this->auth->current()['id'];
-        $slipDate=trim((string)($body['slip_date']??''));
-        if($slipDate===''||!preg_match('/^\d{4}-\d\d-\d\d$/',$slipDate)){
-            $slipDate=gmdate('Y-m-d');
-        }
-        $slipRecorder=trim((string)($body['slip_recorder']??''));
-        $slipProducer=trim((string)($body['slip_producer']??''));
-        $slipPage=trim((string)($body['slip_page']??''));
-        $campaignId=trim((string)($body['campaign_id']??''));
-        if($campaignId===''){
-            foreach($this->store->summaries('campaigns') as $cam){
-                if(($cam['status']??'')==='active'){$campaignId=$cam['id'];break;}
-            }
-            if($campaignId===''){
-                foreach($this->store->summaries('campaigns') as $cam){$campaignId=$cam['id'];break;}
-            }
-        }
-        $receiverId=trim((string)($body['receiver_id']??''));
-        $channel=trim((string)($body['channel']??'bank'));
-        $distPeriod=trim((string)($body['distribution_period']??'once'));
-        $validPeriods=array_keys(Schema::module('donations')['fields']['distribution_period']['options']);
-        if(!in_array($distPeriod,$validPeriods,true))$distPeriod='once';
-
-        $userNote=trim((string)($body['note']??''));
-        $noteParts=[];
-        if($userNote!=='')$noteParts[]=$userNote;
-        if($slipRecorder!=='')$noteParts[]="ผู้บันทึก: {$slipRecorder}";
-        if($slipProducer!=='')$noteParts[]="โปรดิวเซอร์: {$slipProducer}";
-        if($slipPage!=='')$noteParts[]="แผ่นที่: {$slipPage}";
-        $fullDonationNote=implode(' | ',$noteParts);
-
-        // 1. Contact resolution
-        $contactId='';
-        $existingContact=null;
-        foreach($this->store->summaries('contacts') as $c){
-            $cDigits=preg_replace('/\D+/','',(string)($c['phone']??''))??'';
-            if($cDigits!==''&&($cDigits===$digits||str_ends_with($cDigits,$digits)||str_ends_with($digits,$cDigits))){
-                $existingContact=$this->store->read('contacts',$c['id']);
-                break;
-            }
-        }
-
-        $inputName=trim((string)($body['name']??''));
-        $inputAddress=trim((string)($body['address']??''));
-        $inputProvince=trim((string)($body['province']??''));
-        if($inputProvince===''&&$inputAddress!==''){
-            $inputProvince=Schema::detectProvince($inputAddress);
-        }
-
-        $allChanges=[];
-        $contactChanges=[];
-        $isNewContact=false;
-
-        if($existingContact&&empty($existingContact['deleted_at'])){
-            $contactId=$existingContact['id'];
-            $contactUpdated=false;
-            $prevVer=(int)$existingContact['version'];
-            if($inputName!==''&&($existingContact['name']===''||str_starts_with($existingContact['name'],'ผู้บริจาค (เบอร์'))){
-                $existingContact['name']=$inputName;
-                $contactUpdated=true;
-            }
-            if($inputAddress!==''&&$inputAddress!==($existingContact['address']??'')){
-                $existingContact['address']=$inputAddress;
-                if($inputProvince!=='')$existingContact['province']=$inputProvince;
-                $contactUpdated=true;
-            }
-            if($contactUpdated){
-                $existingContact['updated_at']=$now;
-                $existingContact['version']++;
-                $contactChanges[]=[
-                    'collection'=>'contacts',
-                    'id'=>$contactId,
-                    'record'=>$existingContact,
-                    'summary'=>Schema::summary('contacts',$existingContact),
-                    'expected_version'=>$prevVer,
-                ];
-                $contactChanges[]=$this->auditChange('contacts',$contactId,'updated_from_live_slip');
-            }
-            $finalContact=$existingContact;
-        } else {
-            $isNewContact=true;
-            $contactId=crm_id('con');
-            $displayName=$inputName!==''?$inputName:"ผู้บริจาค (เบอร์ {$formattedPhone})";
-            $finalContact=[
-                'id'=>$contactId,
-                'version'=>1,
-                'created_at'=>$now,
-                'updated_at'=>$now,
-                'deleted_at'=>null,
-                'created_by'=>$actorId,
-                'name'=>$displayName,
-                'phone'=>$formattedPhone,
-                'email'=>'',
-                'type'=>'donor',
-                'province'=>$inputProvince,
-                'address'=>$inputAddress,
-                'tags'=>'รายการสด',
-                'notes'=>$slipRecorder?"เพิ่มจากใบงานรายการสด (ผู้บันทึก: {$slipRecorder})":'เพิ่มจากใบงานรายการสด',
-                'legacy_id'=>'',
-            ];
-            $contactChanges[]=[
-                'collection'=>'contacts',
-                'id'=>$contactId,
-                'record'=>$finalContact,
-                'summary'=>Schema::summary('contacts',$finalContact),
-            ];
-            $contactChanges[]=$this->auditChange('contacts',$contactId,'created_from_live_slip');
-        }
-
-        // 2. Donation record
-        $donationId=crm_id('don');
-        $barcode=Schema::data('donations',['barcode'=>''],$this->store,true)['barcode']??('RCP-'.gmdate('Ymd').'-'.substr(bin2hex(random_bytes(2)),0,4));
-        $donationRecord=[
-            'id'=>$donationId,
-            'version'=>1,
-            'created_at'=>$now,
-            'updated_at'=>$now,
-            'deleted_at'=>null,
-            'created_by'=>$actorId,
-            'contact_id'=>$contactId,
-            'campaign_id'=>$campaignId,
-            'receiver_id'=>$receiverId,
-            'amount_satang'=>$amountSatang,
-            'donated_at'=>$slipDate,
-            'status'=>'pending',
-            'barcode'=>$barcode,
-            'channel'=>$channel,
-            'distribution_period'=>$distPeriod,
-            'note'=>$fullDonationNote,
-            'legacy_id'=>'',
-        ];
-        $allChanges[]=[
-            'collection'=>'donations',
-            'id'=>$donationId,
-            'record'=>$donationRecord,
-            'summary'=>Schema::summary('donations',$donationRecord),
-        ];
-        $allChanges[]=$this->auditChange('donations',$donationId,'created_from_live_slip');
-
-        // 3. Hadiyah & Task Handling
-        $hadiyahMode=trim((string)($body['hadiyah_mode']??'none'));
-        $createdShipment=null;
-        $createdTask=null;
-        $hasAddress=!empty(trim((string)($finalContact['address']??'')));
-
-        if($hadiyahMode==='pending'){
-            // "รอแจ้ง" -> create task for Call Center
-            $autoTaskId=crm_id('tsk');
-            $createdTask=[
-                'id'=>$autoTaskId,
-                'version'=>1,
-                'created_at'=>$now,
-                'updated_at'=>$now,
-                'deleted_at'=>null,
-                'created_by'=>$actorId,
-                'title'=>"📞 โทรสอบถามฮาดียะห์: {$finalContact['name']} (ยอด ฿".number_format($amountSatang/100,2).")",
-                'contact_id'=>$contactId,
-                'assigned_to'=>$actorId,
-                'due_date'=>$slipDate,
-                'priority'=>'normal',
-                'status'=>'open',
-                'note'=>"ผู้บริจาคแจ้งผ่านรายการสดระบุ 'รอแจ้งของฮาดียะฮ์' (ยอดบริจาค ฿".number_format($amountSatang/100,2)." / ผู้บันทึก: {$slipRecorder}) กรุณาโทรติดต่อสอบถามฮาดียะห์ที่ต้องการรับและที่อยู่จัดส่ง",
-            ];
-            $allChanges[]=[
-                'collection'=>'tasks',
-                'id'=>$autoTaskId,
-                'record'=>$createdTask,
-                'summary'=>Schema::summary('tasks',$createdTask),
-            ];
-            $allChanges[]=$this->auditChange('tasks',$autoTaskId,'auto_created_from_live_slip');
-        } elseif($hadiyahMode==='receive'){
-            $hadiyahId=trim((string)($body['hadiyah_id']??''));
-            $qty=max(1,(int)($body['hadiyah_qty']??1));
-            $lotId=trim((string)($body['lot_id']??''));
-            $hadItem=$hadiyahId!==''?$this->store->read('hadeeya',$hadiyahId):null;
-            $hadName=$hadItem['name']??'ของฮาดียะห์';
-
-            if($lotId===''&&$hadiyahId!==''){
-                $fifo=$this->findFifoLot($hadiyahId,$qty);
-                if($fifo)$lotId=$fifo['id'];
-            }
-
-            $shipmentId=crm_id('shp');
-            $shipmentNoteParts=array_filter([
-                "ผู้รับ: {$finalContact['name']}",
-                "โทร: {$finalContact['phone']}",
-                $hasAddress?"ที่อยู่: {$finalContact['address']}".(!empty($finalContact['province'])?" จ.{$finalContact['province']}":""):"⚠️ ยังไม่มีที่อยู่จัดส่ง (รอ Call Center โทรสอบถาม)",
-                $slipRecorder?"ผู้บันทึก: {$slipRecorder}":"",
-            ]);
-
-            $shipmentRecord=[
-                'id'=>$shipmentId,
-                'version'=>1,
-                'created_at'=>$now,
-                'updated_at'=>$now,
-                'deleted_at'=>null,
-                'created_by'=>$actorId,
-                'donation_id'=>$donationId,
-                'hadeeya_id'=>$hadiyahId,
-                'lot_id'=>$lotId,
-                'quantity'=>$qty,
-                'delivery_company_id'=>'',
-                'tracking_no'=>'',
-                'status'=>'preparing',
-                'sent_at'=>null,
-                'received_at'=>null,
-                'note'=>implode(' | ',$shipmentNoteParts),
-                'proof_file_id'=>'',
-            ];
-
-            // Stock deduction if lot selected
-            if($lotId!==''){
-                $lot=$this->store->read('stock_lots',$lotId);
-                if($lot&&empty($lot['deleted_at'])){
-                    $oldQty=(int)($lot['quantity']??0);
-                    if($oldQty>=$qty){
-                        $newQty=$oldQty-$qty;
-                        $lotPrevVersion=(int)$lot['version'];
-                        $lot['quantity']=$newQty;
-                        $lot['updated_at']=$now;
-                        $lot['version']++;
-                        $shipmentRecord['stock_deducted']=true;
-                        $shipmentRecord['deducted_lot_id']=$lotId;
-                        $shipmentRecord['deducted_qty']=$qty;
-
-                        $movId=crm_id('mov');
-                        $movement=[
-                            'id'=>$movId,
-                            'version'=>1,
-                            'created_at'=>$now,
-                            'updated_at'=>$now,
-                            'deleted_at'=>null,
-                            'lot_id'=>$lotId,
-                            'movement'=>'issue',
-                            'quantity'=>$qty,
-                            'before'=>$oldQty,
-                            'after'=>$newQty,
-                            'reason'=>"ตัดสต็อกอัตโนมัติจากใบงานรายการสด (จัดส่ง #".substr($shipmentId,0,10).")",
-                            'actor'=>$actorId,
-                        ];
-                        $allChanges[]=[
-                            'collection'=>'stock_lots',
-                            'id'=>$lotId,
-                            'record'=>$lot,
-                            'summary'=>Schema::summary('stock_lots',$lot),
-                            'expected_version'=>$lotPrevVersion,
-                        ];
-                        $allChanges[]=[
-                            'collection'=>'inventory_moves',
-                            'id'=>$movId,
-                            'record'=>$movement,
-                            'summary'=>Schema::summary('inventory_moves',$movement),
-                        ];
-                        $allChanges[]=$this->auditChange('inventory_moves',$movId,'auto_issue');
-                    }
-                }
-            }
-
-            $allChanges[]=[
-                'collection'=>'shipments',
-                'id'=>$shipmentId,
-                'record'=>$shipmentRecord,
-                'summary'=>Schema::summary('shipments',$shipmentRecord),
-            ];
-            $allChanges[]=$this->auditChange('shipments',$shipmentId,'created_from_live_slip');
-            $createdShipment=$shipmentRecord;
-
-            // If contact has NO address, generate Call Center task to get the address!
-            if(!$hasAddress){
-                $autoTaskId=crm_id('tsk');
-                $createdTask=[
-                    'id'=>$autoTaskId,
-                    'version'=>1,
-                    'created_at'=>$now,
-                    'updated_at'=>$now,
-                    'deleted_at'=>null,
-                    'created_by'=>$actorId,
-                    'title'=>"📞 โทรขอที่อยู่จัดส่งฮาดียะห์: {$hadName} ({$finalContact['name']})",
-                    'contact_id'=>$contactId,
-                    'assigned_to'=>$actorId,
-                    'due_date'=>$slipDate,
-                    'priority'=>'high',
-                    'status'=>'open',
-                    'note'=>"ผู้บริจาคแจ้งยอด ฿".number_format($amountSatang/100,2)." ผ่านรายการสด ขอรับ {$hadName} (จำนวน {$qty} ชิ้น) แต่ยังไม่มีที่อยู่จัดส่งในระบบ กรุณาโทรติดต่อเบอร์ {$finalContact['phone']} เพื่อขอที่อยู่จัดส่งพัสดุ",
-                ];
-                $allChanges[]=[
-                    'collection'=>'tasks',
-                    'id'=>$autoTaskId,
-                    'record'=>$createdTask,
-                    'summary'=>Schema::summary('tasks',$createdTask),
-                ];
-                $allChanges[]=$this->auditChange('tasks',$autoTaskId,'auto_created_from_live_slip');
-            }
-        }
-
-        // Commit all changes in ONE atomic transaction
-        $finalChanges=array_merge($contactChanges,$allChanges);
-        $this->store->transact($finalChanges);
-
-        crm_json([
-            'ok'=>true,
-            'is_new_contact'=>$isNewContact,
-            'contact'=>$finalContact,
-            'donation'=>$donationRecord,
-            'shipment'=>$createdShipment,
-            'task'=>$createdTask,
-            'message'=>"บันทึกใบรับบริจาคเรียบร้อย (เบอร์ {$formattedPhone} ยอด ฿".number_format($amountSatang/100,2).")",
-        ],201);
     }
     private function dbInfo(): never {
         $me=$this->auth->current();

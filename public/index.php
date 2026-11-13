@@ -116,7 +116,61 @@ $csrf = crm_csrf();
                         <div class="top-search" id="top-search"><span class="top-search-icon" aria-hidden="true">⌕</span><input id="global-search" class="top-search-input" type="search" autocomplete="off" placeholder="ค้นหา หรือพิมพ์สั่ง AI…" aria-label="ค้นหาทั้งระบบ"><button type="button" class="top-search-ai-btn" id="ai-search-btn" title="กดเพื่อให้ AI วิเคราะห์และพาไปหน้าที่ต้องการ">✦ AI</button>
                             <div class="top-search-results hidden" id="global-search-results" role="listbox"></div>
                         </div><span class="top-badge"><i></i> ระบบพร้อมใช้งาน</span><button class="icon-btn" id="theme-toggle" aria-label="เปลี่ยนธีม" title="สลับธีม">◐</button>
-                        <div class="avatar miniavatar"><?= crm_e(mb_substr($user['name'] ?? 'A', 0, 1)) ?></div>
+                        <div class="profile-menu-wrap" id="profile-menu-wrap">
+                            <button type="button" class="avatar-btn" id="profile-menu-btn" aria-haspopup="true" aria-expanded="false" title="เมนูโปรไฟล์ <?= crm_e($user['name']) ?>">
+                                <div class="avatar miniavatar"><?= crm_e(mb_substr($user['name'] ?? 'A', 0, 1)) ?></div>
+                                <span class="avatar-arrow" aria-hidden="true">▾</span>
+                            </button>
+                            <div class="profile-dropdown hidden" id="profile-dropdown" role="menu">
+                                <div class="profile-dropdown-head">
+                                    <div class="avatar"><?= crm_e(mb_substr($user['name'] ?? 'A', 0, 1)) ?></div>
+                                    <div class="profile-dropdown-user">
+                                        <strong class="profile-dropdown-name"><?= crm_e($user['name']) ?></strong>
+                                        <span class="profile-dropdown-role"><?= crm_e($auth->roles()[$user['role']] ?? $user['role']) ?> · <small class="muted">@<?= crm_e($user['username']) ?></small></span>
+                                    </div>
+                                </div>
+                                <div class="profile-dropdown-divider"></div>
+                                <div class="profile-dropdown-menu">
+                                    <button type="button" class="profile-dropdown-item" data-pnav="settings">
+                                        <span class="pitem-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+                                        <div class="pitem-text">
+                                            <strong>ตั้งค่าส่วนตัว</strong>
+                                            <small>เปลี่ยนรหัสผ่าน, ธีมสี, ตั้งค่า AI</small>
+                                        </div>
+                                    </button>
+                                    <?php if (($user['role'] ?? '') === 'admin'): ?>
+                                    <button type="button" class="profile-dropdown-item" data-pnav="users">
+                                        <span class="pitem-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                                        <div class="pitem-text">
+                                            <strong>ผู้ใช้งานและสิทธิ์</strong>
+                                            <small>จัดการสิทธิ์และบัญชีผู้ใช้</small>
+                                        </div>
+                                    </button>
+                                    <?php endif; ?>
+                                    <?php if (in_array($user['role'] ?? '', ['admin', 'auditor'], true)): ?>
+                                    <button type="button" class="profile-dropdown-item" data-pnav="audit">
+                                        <span class="pitem-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></svg></span>
+                                        <div class="pitem-text">
+                                            <strong>ประวัติการทำงาน</strong>
+                                            <small>ตรวจสอบล็อกและโหมดพัฒนา</small>
+                                        </div>
+                                    </button>
+                                    <?php endif; ?>
+                                    <button type="button" class="profile-dropdown-item" id="top-theme-toggle">
+                                        <span class="pitem-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/></svg></span>
+                                        <div class="pitem-text">
+                                            <strong>สลับธีมสีหน้าจอ</strong>
+                                            <small id="profile-theme-label">Premium Navy</small>
+                                        </div>
+                                    </button>
+                                </div>
+                                <div class="profile-dropdown-divider"></div>
+                                <button type="button" class="profile-dropdown-logout" id="top-logout-btn">
+                                    <span class="pitem-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></span>
+                                    <span>ออกจากระบบ</span>
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </header>
                 <main id="page-content" class="page" tabindex="-1">

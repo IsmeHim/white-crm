@@ -285,6 +285,9 @@ final class Store
             ');
 
             foreach ($changes as $change) {
+                if (empty($change) || empty($change['collection'])) {
+                    continue;
+                }
                 $collection = $this->validateCollection((string)$change['collection']);
                 $id = $this->validateId((string)$change['id']);
                 $record = $change['record'];

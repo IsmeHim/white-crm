@@ -140,7 +140,7 @@
     const trend=buildTrendChart(a.by_month, a.by_month_counts||{}, 'ยังไม่มีรายการบริจาคที่ยืนยัน', currentChartMode);
     let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
     const campCounts=a.by_campaign_counts||{};
-    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',btn('⚡ คีย์ใบงาน TV สด','open-live-slip','primary')+' '+btn('＋ เพิ่มรายการบริจาค','new-donation',''))+
+    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',btn('＋ เพิ่มรายการบริจาค','new-donation','primary'))+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคตามโครงการ</h3><small>เรียงตามยอดรวม</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ยังไม่มีข้อมูล</div>'}</div></section></div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><h3>ภาพรวมการดำเนินงาน</h3></div><div class="stat-list">${[['รายการบริจาคทั้งหมด',num(c.donations)],['งานติดตาม',num(c.tasks)],['รายการฮาดียะห์',num(c.hadeeya)],['ล็อตสินค้า',num(c.stock_lots)],['ความคิดเห็น / ข้อเสนอแนะ',num(c.feedback)]].map(([k,v])=>`<div class="stat-list-row"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><h3>ประกาศล่าสุด</h3></div>${(a.announcements||[]).length?(a.announcements||[]).map(p=>`<div class="item-row"><span class="mini-dot"></span><div><div class="item-title">${esc(p.title)}</div><div class="item-small">${esc(dateDisplay(p.created_at))}</div></div></div>`).join(''):'<div class="empty">ยังไม่มีประกาศ</div>'}</section></div>`;
@@ -153,7 +153,6 @@
         if(barsEl) barsEl.innerHTML = updated.html;
       };
     });
-    $('[data-action="open-live-slip"]')?.addEventListener('click',()=>openLiveSlipModal());
     $('[data-action="new-donation"]')?.addEventListener('click',()=>{navigate('donations');setTimeout(()=>openForm('donations'),120);});
   }
   async function optionNames(module){
@@ -804,7 +803,87 @@
     $('#cancel-modal').onclick=closeModal;$('#user-form').onsubmit=async e=>{e.preventDefault();const d=formData(e.target);d.active=d.active==='1';if(user){d.id=user.id;d.version=user.version;}
       try{await api('users',{},user?'PUT':'POST',d);closeModal();toast('บันทึกบัญชีเรียบร้อย');render();}catch(err){toast(err.message,true);}};
   }
-  async function auditPage(){const r=await api('audit',{page:state.page});$('#page-content').innerHTML=header('AUDIT / HISTORY','ประวัติการทำงาน','บันทึกการเปลี่ยนแปลงข้อมูลย้อนหลัง')+`<section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>เวลา UTC</th><th>ผู้ทำรายการ</th><th>โมดูล</th><th>กิจกรรม</th><th>อ้างอิง</th></tr></thead><tbody>${r.items.map(a=>`<tr><td>${esc(a.created_at)}</td><td>${esc(a.actor_name)}</td><td>${esc(a.module)}</td><td><span class="pill">${esc(a.action)}</span></td><td class="cell-muted">${esc(a.record_id)}</td></tr>`).join('')}</tbody></table></div><div class="table-footer"><span>${num(r.total)} รายการ</span><div class="pagination"><button class="btn small" id="prev-page" ${r.page===1?'disabled':''}>ก่อน</button><button class="btn small" id="next-page" ${r.page===r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;$('#prev-page').onclick=()=>{state.page--;render()};$('#next-page').onclick=()=>{state.page++;render()};}
+  async function auditPage(){
+    const r=await api('audit',{page:state.page});
+    const isEnabled = r.enabled !== false;
+    const statusBadge = isEnabled
+      ? `<span class="top-badge" style="background:rgba(162,187,59,.15);color:var(--accent-text);padding:6px 12px;border-radius:20px;font-size:11.5px;font-weight:750;display:inline-flex;align-items:center;gap:6px"><i style="width:7px;height:7px;background:#89ba32;border-radius:50%;display:inline-block"></i> กำลังบันทึกประวัติ</span>`
+      : `<span class="top-badge" style="background:rgba(239,107,99,.18);color:#ef6b63;border:1px solid rgba(239,107,99,.35);padding:6px 12px;border-radius:20px;font-size:11.5px;font-weight:750;display:inline-flex;align-items:center;gap:6px"><i style="width:7px;height:7px;background:#ef6b63;border-radius:50%;display:inline-block"></i> ปิดบันทึกชั่วคราว</span>`;
+    
+    const iconPause = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>`;
+    const iconPlay = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="6 3 20 12 6 21 6 3"/></svg>`;
+    const iconTrash = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>`;
+    const iconPauseCircle = `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef6b63" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="10" y1="15" x2="10" y2="9"/><line x1="14" y1="15" x2="14" y2="9"/></svg>`;
+
+    const toggleBtn = isEnabled
+      ? `<button type="button" class="btn small" id="toggle-audit-btn" style="border-color:rgba(239,107,99,.5);color:#ef6b63;font-weight:750" title="ปิดการบันทึกประวัติการทำงานเพื่อประหยัดพื้นที่ระหว่างพัฒนา">${iconPause} ปิดเก็บประวัติ (โหมดพัฒนา)</button>`
+      : `<button type="button" class="btn small primary" id="toggle-audit-btn" style="font-weight:750" title="เปิดใช้งานการบันทึกประวัติการทำงาน">${iconPlay} เปิดเก็บประวัติ</button>`;
+
+    const clearBtn = `<button type="button" class="btn small danger" id="clear-audit-btn" style="font-weight:750" title="ล้างประวัติการทำงานทั้งหมดและคืนพื้นที่ฐานข้อมูล (VACUUM)">${iconTrash} ล้างประวัติทั้งหมด</button>`;
+
+    const actions = `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">${statusBadge} ${toggleBtn} ${clearBtn}</div>`;
+
+    let bannerNotice = '';
+    if (!isEnabled) {
+      bannerNotice = `<div style="margin-bottom:18px;padding:14px 18px;border-radius:12px;background:rgba(239,107,99,.12);border:1px solid rgba(239,107,99,.35);display:flex;align-items:center;gap:12px">
+        <span style="display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${iconPauseCircle}</span>
+        <div>
+          <div style="font-weight:800;color:var(--text)">ระบบอยู่ในโหมดพัฒนา: ปิดการบันทึกประวัติการทำงานชั่วคราว</div>
+          <div class="muted mini" style="margin-top:2px">การกระทำต่างๆ ในระบบจะไม่ถูกบันทึกลงฐานข้อมูล เพื่อประหยัดพื้นที่จัดเก็บ SQLite</div>
+        </div>
+      </div>`;
+    }
+
+    const rows = (r.items && r.items.length)
+      ? r.items.map(a=>`<tr><td>${esc(a.created_at)}</td><td>${esc(a.actor_name)}</td><td>${esc(a.module)}</td><td><span class="pill">${esc(a.action)}</span></td><td class="cell-muted">${esc(a.record_id)}</td></tr>`).join('')
+      : `<tr><td colspan="5" style="text-align:center;padding:36px;color:var(--muted)">ยังไม่มีรายการประวัติการทำงาน (หรือประวัติถูกล้างแล้ว)</td></tr>`;
+
+    $('#page-content').innerHTML = header('AUDIT / HISTORY','ประวัติการทำงาน','บันทึกการเปลี่ยนแปลงข้อมูลย้อนหลัง', actions) +
+      bannerNotice +
+      `<section class="panel table-panel">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>เวลา UTC</th><th>ผู้ทำรายการ</th><th>โมดูล</th><th>กิจกรรม</th><th>อ้างอิง</th></tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+        <div class="table-footer">
+          <span>${num(r.total)} รายการ</span>
+          <div class="pagination">
+            <button class="btn small" id="prev-page" ${r.page===1?'disabled':''}>ก่อน</button>
+            <button class="btn small" id="next-page" ${r.page===r.pages||!r.pages?'disabled':''}>ถัดไป</button>
+          </div>
+        </div>
+      </section>`;
+
+    $('#prev-page').onclick=()=>{state.page--;render();};
+    $('#next-page').onclick=()=>{state.page++;render();};
+
+    const handleToggle = async () => {
+      try {
+        const res = await api('audit', {}, 'POST', { action: 'toggle', enabled: !isEnabled });
+        toast(res.message || 'อัปเดตสถานะสำเร็จ');
+        render();
+      } catch(err) {
+        toast(err.message, true);
+      }
+    };
+    $('#toggle-audit-btn')?.addEventListener('click', handleToggle);
+
+    $('#clear-audit-btn')?.addEventListener('click', async () => {
+      if (!confirm('ยืนยันล้างประวัติการทำงานทั้งหมดในระบบเพื่อประหยัดพื้นที่ใช่หรือไม่?\n\n(ระบบจะลบข้อมูลล็อกทั้งหมดและรัน VACUUM คืนพื้นที่ฐานข้อมูล SQLite ทันที)')) return;
+      try {
+        const res = await api('audit', {}, 'POST', { action: 'clear' });
+        toast(res.message || 'ล้างประวัติและคืนพื้นที่เรียบร้อย');
+        state.page = 1;
+        render();
+      } catch(err) {
+        toast(err.message, true);
+      }
+    });
+  }
   const aiModelList = [
     ['gemini-3.5-flash-lite', 'gemini-3.5-flash-lite · ตัวหลัก (ฟรีวันละ 500 ครั้ง · เร็ว ฉลาดพอดี)'],
     ['gemini-3.1-flash-lite', 'gemini-3.1-flash-lite · สำรอง 1 (ฟรีอีก 500 ครั้ง/วัน · รวมเป็น 1,000)'],
@@ -1061,7 +1140,7 @@
       try{await api('ai-config',{},'POST',d);closeModal();toast('บันทึก Gemini API Key เรียบร้อย! ลองพิมพ์ค้นหาได้เลย');if(state.module==='settings')render();}catch(err){toast(err.message,true);}
     };
   }
-  function setTheme(theme){const t=['premium','classic','dark'].includes(theme)?theme:'premium';localStorage.setItem('crm-theme',t);document.documentElement.dataset.theme=t;}
+  function setTheme(theme){const t=['premium','classic','dark'].includes(theme)?theme:'premium';localStorage.setItem('crm-theme',t);document.documentElement.dataset.theme=t;const labelEl=$('#profile-theme-label');if(labelEl){const names={premium:'Premium Navy',classic:'Classic Green',dark:'Dark Professional'};labelEl.textContent=(names[t]||t)+' (เปิดอยู่)';}}
   function wireGlobalSearch(){
     const input=$('#global-search'),box=$('#global-search-results'),aiBtn=$('#ai-search-btn');if(!input||!box)return;
     let timer,aiTimer;
@@ -1252,10 +1331,70 @@
       if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();input.focus();input.select();}
     });
   }
+  function wireProfileMenu(){
+    const btn=$('#profile-menu-btn'),drop=$('#profile-dropdown');
+    if(!btn||!drop)return;
+
+    const close=()=>{
+      drop.classList.add('hidden');
+      btn.classList.remove('active');
+      btn.setAttribute('aria-expanded','false');
+    };
+    const toggle=()=>{
+      const isHidden=drop.classList.contains('hidden');
+      if(isHidden){
+        drop.classList.remove('hidden');
+        btn.classList.add('active');
+        btn.setAttribute('aria-expanded','true');
+      } else {
+        close();
+      }
+    };
+
+    btn.addEventListener('click',e=>{
+      e.stopPropagation();
+      toggle();
+    });
+
+    document.addEventListener('click',e=>{
+      if(!e.target.closest('#profile-menu-wrap'))close();
+    });
+
+    window.addEventListener('keydown',e=>{
+      if(e.key==='Escape'&&!drop.classList.contains('hidden')){
+        close();
+        btn.focus();
+      }
+    });
+
+    drop.querySelectorAll('[data-pnav]').forEach(item=>{
+      item.addEventListener('click',()=>{
+        close();
+        const mod=item.dataset.pnav;
+        if(mod)navigate(mod);
+      });
+    });
+
+    $('#top-theme-toggle')?.addEventListener('click',()=>{
+      const themes=['premium','classic','dark'];
+      const i=themes.indexOf(localStorage.getItem('crm-theme')||'premium');
+      setTheme(themes[(i+1)%3]);
+    });
+
+    const doLogout=async()=>{
+      try{
+        await api('logout',{},'POST',{});
+        location.href=location.pathname;
+      }catch(e){
+        toast(e.message,true);
+      }
+    };
+    $('#top-logout-btn')?.addEventListener('click',doLogout);
+  }
   async function init(){setTheme(localStorage.getItem('crm-theme')||'premium');if(document.body.dataset.screen!=='app'){authForms();return;}
     try{const r=await api('session');state.user=r.user;state.roles=r.roles;const s=await api('schema');state.modules=s.modules;}catch(e){toast(e.message,true);return;}
     let requested=new URLSearchParams(location.search).get('module')||'dashboard';state.module=roleAllows(requested)?requested:'dashboard';
-    makeNav();wireGlobalSearch();$('#logout-btn').onclick=async()=>{try{await api('logout',{},'POST',{});location.href=location.pathname;}catch(e){toast(e.message,true);}};
+    makeNav();wireGlobalSearch();wireProfileMenu();$('#logout-btn').onclick=async()=>{try{await api('logout',{},'POST',{});location.href=location.pathname;}catch(e){toast(e.message,true);}};
     $('#menu-open').onclick=()=>{$('#sidebar').classList.add('show');$('#overlay').classList.add('show');};$('#sidebar-close').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;
     $('#modal-close').onclick=closeModal;$('#modal-backdrop').addEventListener('click',e=>{if(e.target.id==='modal-backdrop')closeModal();});
     $('#theme-toggle').onclick=()=>{const themes=['premium','classic','dark'];const i=themes.indexOf(localStorage.getItem('crm-theme')||'premium');setTheme(themes[(i+1)%3]);};
