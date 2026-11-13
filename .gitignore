@@ -4,6 +4,7 @@
 !.env.example
 
 # SQLite Database & Storage Data
+/storage/crm.sqlite
 /storage/*.sqlite
 /storage/*.sqlite-shm
 /storage/*.sqlite-wal

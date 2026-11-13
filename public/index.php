@@ -65,7 +65,7 @@ $csrf = crm_csrf();
     <meta name="description" content="White Channel CRM V2 | Portable No-SQL CRM">
     <link rel="manifest" href="assets/manifest.webmanifest">
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-    <link rel="stylesheet" href="assets/app.css?v=3.1.6">
+    <link rel="stylesheet" href="assets/app.css?v=<?= filemtime(__DIR__ . '/assets/app.css') ?>">
     <title>White Channel CRM V2</title>
 </head>
 
@@ -139,7 +139,7 @@ $csrf = crm_csrf();
         </div>
         <div id="toast-root" aria-live="polite" class="toast-root"></div>
     <?php endif; ?>
-    <script defer src="assets/app.js?v=3.2.0"></script>
+    <script defer src="assets/app.js?v=<?= filemtime(__DIR__ . '/assets/app.js') ?>"></script>
 </body>
 
 </html>

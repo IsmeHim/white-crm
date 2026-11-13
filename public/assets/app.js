@@ -5,6 +5,38 @@
   const money = n => new Intl.NumberFormat('th-TH',{style:'currency',currency:'THB',maximumFractionDigits:2}).format(Number(n || 0)/100);
   const num = n => new Intl.NumberFormat('th-TH').format(Number(n||0));
   const dateDisplay = d => {if(!d)return '—'; const v=String(d);return /^\d{4}-\d\d-\d\d/.test(v)?v.slice(0,10):v;};
+  const thMonthNames=['','ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  function formatMonthYearLabel(key){
+    const parts=String(key||'').split('-');
+    const m=parseInt(parts[1]||'0',10);
+    const y=parseInt(parts[0]||'0',10);
+    const mName=thMonthNames[m]||parts[1]||'';
+    const bYear=y>0?String(y+543).slice(2):'';
+    return `${mName} '${bYear}`;
+  }
+  let currentChartMode = 'amount';
+  function buildTrendChart(byMonthObj, byMonthCountsObj={}, emptyMsg='ยังไม่มีรายการบริจาคที่ยืนยัน', mode=currentChartMode){
+    let months=Object.entries(byMonthObj||{});
+    if(!months.length)return{html:`<div class="empty">${esc(emptyMsg)}</div>`,totalSatang:0,totalCount:0,count:0};
+    const totalSatang=months.reduce((acc,[,v])=>acc+(Number(v)||0),0);
+    const totalCount=Object.values(byMonthCountsObj||{}).reduce((acc,v)=>acc+(Number(v)||0),0);
+    const topAmount=Math.max(1,...months.map(x=>Number(x[1])||0));
+    const topCount=Math.max(1,...months.map(x=>Number(byMonthCountsObj[x[0]]||0)));
+    const maxBarPx=130;
+    const html=months.map(([key,val])=>{
+      const amt=Number(val)||0;
+      const cnt=Number(byMonthCountsObj[key]||0);
+      const label=formatMonthYearLabel(key);
+      const rawH=mode==='count' ? Math.round((cnt/topCount)*maxBarPx) : Math.round((amt/topAmount)*maxBarPx);
+      const bHeight=Math.min(140,Math.max(12,rawH));
+      const primaryText=mode==='count' ? `${num(cnt)} รายการ` : `฿${num(Math.round(amt/100))}`;
+      const subText=mode==='count' ? `฿${num(Math.round(amt/100))}` : (cnt>0?`${num(cnt)} รายการ` : '');
+      const pctAmt=totalSatang>0?Math.round((amt/totalSatang)*100):0;
+      const pctCnt=totalCount>0?Math.round((cnt/totalCount)*100):0;
+      return `<div class="bar-col" data-month="${esc(key)}" title="เดือน ${esc(label)} | ยอดเงิน: ${money(amt)} (${pctAmt}%) | จำนวน: ${num(cnt)} รายการ (${pctCnt}%)"><span class="bar-value">${esc(primaryText)}</span><span class="bar-sub">${esc(subText)}</span><div class="bar bar-h-${bHeight}"></div><span class="bar-label">${esc(label)}</span></div>`;
+    }).join('');
+    return{html,totalSatang,totalCount,count:months.length};
+  }
   const icons = {dashboard:'◫',contacts:'♙',categories:'◇',campaigns:'▦',receivers:'☎',donations:'♥',hadeeya:'◈',stock_lots:'▤',inventory_moves:'⇄',delivery_companies:'▱',shipments:'▰',tasks:'☷',feedback:'☏',announcements:'◉',reports:'▥',users:'♟',audit:'◷',settings:'⚙'};
   const groups = [ ['ภาพรวม',['dashboard','reports']], ['จัดการ CRM',['contacts','campaigns','categories','donations','receivers']], ['คลังและจัดส่ง',['hadeeya','stock_lots','inventory_moves','shipments','delivery_companies']], ['ติดตามและสื่อสาร',['tasks','feedback','announcements']], ['ตั้งค่าระบบ',['users','audit','settings']] ];
   const state={modules:{},roles:{},user:null,module:'dashboard',page:1,q:'',status:'',dateFrom:'',dateTo:'',datePreset:'all',options:{},optionItems:{},table:null};
@@ -105,13 +137,23 @@
   async function dashboard(){
     const a=await api('summary');const c=a.counts;
     const stats=[['ผู้บริจาค / สมาชิก',num(c.contacts),'contacts','ข้อมูลสมาชิกทั้งหมด'],['ยอดบริจาคยืนยัน',money(a.confirmed_satang),'donations','ไม่นับรายการรอและยกเลิก'],['โครงการทั้งหมด',num(c.campaigns),'campaigns','จำนวนโครงการที่บันทึก'],['การจัดส่งทั้งหมด',num(c.shipments),'shipments','รายการจัดส่ง / คืน']];
-    let months=Object.entries(a.by_month||{});const top=Math.max(1,...months.map(x=>x[1]));
-    let chart=months.length?months.map(([key,val])=>`<div class="bar-col"><span class="bar-value">${esc(num(Math.round(val/100)))}</span><div class="bar" style="height:${Math.max(2,Math.round(val/top*155))}px"></div><span class="bar-label">${esc(key.slice(5))}/${esc(key.slice(2,4))}</span></div>`).join(''):'<div class="empty">ยังไม่มีรายการบริจาคที่ยืนยัน</div>';
+    const trend=buildTrendChart(a.by_month, a.by_month_counts||{}, 'ยังไม่มีรายการบริจาคที่ยืนยัน', currentChartMode);
     let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
-    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',btn('＋ เพิ่มรายการบริจาค','new-donation'))+
+    const campCounts=a.by_campaign_counts||{};
+    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',btn('⚡ คีย์ใบงาน TV สด','open-live-slip','primary')+' '+btn('＋ เพิ่มรายการบริจาค','new-donation',''))+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
-      <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>รายการสถานะยืนยันแล้ว / สูงสุด 12 เดือน</small></div><span class="pill green">THB</span></div><div class="bars">${chart}</div><div style="height:28px"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคตามโครงการ</h3><small>เรียงตามยอดรวม</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>`<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)}</strong></div><div class="progress-line"><div style="width:${Math.round(amount/max*100)}%"></div></div></div>`).join(''):'<div class="empty">ยังไม่มีข้อมูล</div>'}</div></section></div>
+      <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคตามโครงการ</h3><small>เรียงตามยอดรวม</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ยังไม่มีข้อมูล</div>'}</div></section></div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><h3>ภาพรวมการดำเนินงาน</h3></div><div class="stat-list">${[['รายการบริจาคทั้งหมด',num(c.donations)],['งานติดตาม',num(c.tasks)],['รายการฮาดียะห์',num(c.hadeeya)],['ล็อตสินค้า',num(c.stock_lots)],['ความคิดเห็น / ข้อเสนอแนะ',num(c.feedback)]].map(([k,v])=>`<div class="stat-list-row"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><h3>ประกาศล่าสุด</h3></div>${(a.announcements||[]).length?(a.announcements||[]).map(p=>`<div class="item-row"><span class="mini-dot"></span><div><div class="item-title">${esc(p.title)}</div><div class="item-small">${esc(dateDisplay(p.created_at))}</div></div></div>`).join(''):'<div class="empty">ยังไม่มีประกาศ</div>'}</section></div>`;
+    document.querySelectorAll('[data-chart-mode]').forEach(btn => {
+      btn.onclick = () => {
+        currentChartMode = btn.dataset.chartMode;
+        document.querySelectorAll('[data-chart-mode]').forEach(b => b.classList.toggle('active', b.dataset.chartMode === currentChartMode));
+        const updated = buildTrendChart(a.by_month, a.by_month_counts||{}, 'ยังไม่มีรายการบริจาคที่ยืนยัน', currentChartMode);
+        const barsEl = $('#trend-bars');
+        if(barsEl) barsEl.innerHTML = updated.html;
+      };
+    });
+    $('[data-action="open-live-slip"]')?.addEventListener('click',()=>openLiveSlipModal());
     $('[data-action="new-donation"]')?.addEventListener('click',()=>{navigate('donations');setTimeout(()=>openForm('donations'),120);});
   }
   async function optionNames(module){
@@ -725,15 +767,24 @@
       ['จำนวนรายการบริจาค',num(a.period_donations_count??c.donations),'donations',periodNote],
       ['ผู้บริจาค / สมาชิกทั้งหมด',num(c.contacts),'contacts','ฐานข้อมูลสมาชิกในระบบ']
     ];
-    let months=Object.entries(a.by_month||{});const top=Math.max(1,...months.map(x=>x[1]));
-    let chart=months.length?months.map(([key,val])=>`<div class="bar-col"><span class="bar-value">${esc(num(Math.round(val/100)))}</span><div class="bar" style="height:${Math.max(2,Math.round(val/top*155))}px"></div><span class="bar-label">${esc(key.slice(5))}/${esc(key.slice(2,4))}</span></div>`).join(''):'<div class="empty">ไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้</div>';
+    const trend=buildTrendChart(a.by_month, a.by_month_counts||{}, 'ไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้', currentChartMode);
     let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
+    const campCounts=a.by_campaign_counts||{};
     const box=$('#page-content');
     box.innerHTML=header('ANALYTICS / REPORTS','รายงานและสถิติ','วิเคราะห์ยอดบริจาคตามช่วงวันที่ โครงการ และส่งออกข้อมูล CSV',btn('＋ เพิ่มรายการบริจาค','new-donation','primary'))+
       renderDateFilterBar()+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
-      <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>${esc(periodNote)}</small></div><span class="pill green">THB</span></div><div class="bars">${chart}</div><div style="height:28px"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคแยกตามโครงการ</h3><small>${esc(periodNote)}</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>`<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)}</strong></div><div class="progress-line"><div style="width:${Math.round(amount/max*100)}%"></div></div></div>`).join(''):'<div class="empty">ไม่มีข้อมูลในช่วงเวลานี้</div>'}</div></section></div>
+      <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>${esc(periodNote)} · ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-rep-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-rep-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="rep-trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคแยกตามโครงการ</h3><small>${esc(periodNote)}</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ไม่มีข้อมูลในช่วงเวลานี้</div>'}</div></section></div>
       <section class="panel"><h3>⇩ ส่งออกข้อมูลรายงาน (CSV สำหรับ Excel)</h3><p class="muted">คลิกเพื่อดาวน์โหลดไฟล์ CSV (${esc(periodNote)})</p><div class="quick-actions">${['donations','contacts','campaigns','hadeeya','stock_lots','shipments'].filter(roleAllows).map(m=>btn('⇩ ส่งออก '+labelFor(m),'export-'+m)).join('')}</div></section>`;
+    box.querySelectorAll('[data-rep-chart-mode]').forEach(btn => {
+      btn.onclick = () => {
+        currentChartMode = btn.dataset.repChartMode;
+        box.querySelectorAll('[data-rep-chart-mode]').forEach(b => b.classList.toggle('active', b.dataset.repChartMode === currentChartMode));
+        const updated = buildTrendChart(a.by_month, a.by_month_counts||{}, 'ไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้', currentChartMode);
+        const barsEl = $('#rep-trend-bars');
+        if(barsEl) barsEl.innerHTML = updated.html;
+      };
+    });
     wireDateFilterBar();
     box.querySelectorAll('[data-action^="export-"]').forEach(b=>b.onclick=()=>{
       const mod=b.dataset.action.replace('export-','');
@@ -792,17 +843,17 @@
         <div class="quota-card">
           <div class="quota-card-top"><span>โควต้าต่อวัน (RPD)</span><span class="pill ${rpdPct>=90?'red':rpdPct>=70?'yellow':'green'}">คงเหลือ ${num(cur.rpd_remaining)} ครั้ง</span></div>
           <div class="quota-num">${num(cur.rpd_used)} <small>/ ${num(cur.rpd_limit)} ครั้ง</small></div>
-          <div class="progress-line"><div style="width:${rpdPct}%"></div></div>
+          <div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(rpdPct)))}"></div></div>
         </div>
         <div class="quota-card">
           <div class="quota-card-top"><span>โควต้าต่อนาที (RPM)</span><span class="pill">คงเหลือ ${num(cur.rpm_remaining)}/นาที</span></div>
           <div class="quota-num">${num(cur.rpm_used)} <small>/ ${num(cur.rpm_limit)} ครั้ง</small></div>
-          <div class="progress-line"><div style="width:${rpmPct}%"></div></div>
+          <div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(rpmPct)))}"></div></div>
         </div>
         <div class="quota-card">
           <div class="quota-card-top"><span>โทเคนต่อนาที (TPM)</span><span class="pill">วันนี้ใช้ ${num(cur.d_tokens)} tokens</span></div>
           <div class="quota-num">${num(cur.tpm_used)} <small>/ ${num(Math.round(cur.tpm_limit/1000))}K</small></div>
-          <div class="progress-line"><div style="width:${tpmPct}%"></div></div>
+          <div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(tpmPct)))}"></div></div>
         </div>
       </div>
       <details class="quota-details">
