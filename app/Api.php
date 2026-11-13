@@ -40,10 +40,12 @@ final class Api {
                     } else $this->auth->require($module);
                     if($module==='users'){$items=[];foreach($this->store->summaries('users') as $s){if(!empty($s['active']))$items[]=['id'=>$s['id'],'name'=>$s['name']];}crm_json(['items'=>array_slice($items,0,300)]);}
                     if(!Schema::module($module))crm_json(['error'=>'Invalid module'],404);
-                    $r=$this->store->listing($module,(string)($_GET['q']??''),[],1,100);
+                    $r=$this->store->listing($module,(string)($_GET['q']??''),[],1,300);
                     $hadeeyaNames=[];
-                    if($module==='stock_lots'){
+                    if($module==='stock_lots'||$module==='donations'){
                         foreach($this->store->summaries('hadeeya') as $h)$hadeeyaNames[$h['id']]=$h['name']??$h['id'];
+                    }
+                    if($module==='stock_lots'){
                         usort($r['items'],function($a,$b){
                             $qa=((int)($a['quantity']??0))>0?1:0;
                             $qb=((int)($b['quantity']??0))>0?1:0;
@@ -67,12 +69,33 @@ final class Api {
                             $cName=$con['name']??'';
                             $amt=number_format(((int)($x['amount_satang']??0))/100,2);
                             $bc=!empty($x['barcode'])?$x['barcode']:substr((string)$x['id'],0,10);
+                            $hId=(string)($x['hadeeya_id']??'');
+                            $hQty=max(1,(int)($x['hadeeya_qty']??1));
+                            $hName=$hId!==''?($hadeeyaNames[$hId]??''):'';
+                            $hTag=$hName!==''?" · 🎁 {$hName}".($hQty>1?" x{$hQty}":''):'';
                             $addrParts=array_filter([
                                 !empty($con['name'])?'ผู้รับ: '.$con['name']:'',
                                 !empty($con['phone'])?'โทร: '.$con['phone']:'',
                                 !empty($con['address'])?'ที่อยู่: '.$con['address'].(!empty($con['province'])?' จ.'.$con['province']:''):''
                             ]);
-                            return ['id'=>$x['id'],'name'=>"{$bc} · {$cName} (฿{$amt})",'contact_id'=>$x['contact_id']??'','shipping_note'=>implode(' | ',$addrParts)];
+                            return [
+                                'id'=>$x['id'],
+                                'name'=>"{$bc} · {$cName} (฿{$amt}){$hTag}",
+                                'contact_id'=>$x['contact_id']??'',
+                                'hadeeya_id'=>$hId,
+                                'hadeeya_qty'=>$hQty,
+                                'hadeeya_status'=>$x['hadeeya_status']??'',
+                                'shipping_note'=>implode(' | ',$addrParts)
+                            ];
+                        }
+                        if($module==='contacts'){
+                            return [
+                                'id'=>$x['id'],
+                                'name'=>$x['name']??$x['id'],
+                                'phone'=>$x['phone']??'',
+                                'address'=>$x['address']??'',
+                                'province'=>$x['province']??'',
+                            ];
                         }
                         if($module==='delivery_companies'){
                             return ['id'=>$x['id'],'name'=>$x['name']??$x['id'],'tracking_url'=>$x['tracking_url']??''];
@@ -132,10 +155,54 @@ final class Api {
         $id=crm_id($schema['prefix']);$now=crm_now();
         $actorId=$this->auth->current()['id'];
         if($module==='tasks' && empty($data['assigned_to']))$data['assigned_to']=$actorId;
+        if($module==='donations'){
+            if(!empty($data['hadeeya_id']) && empty($data['hadeeya_status']))$data['hadeeya_status']='receive';
+            if(!empty($data['hadeeya_id']) && (int)($data['hadeeya_qty']??0)<=0)$data['hadeeya_qty']=1;
+        }
         $record=['id'=>$id,'version'=>1,'created_at'=>$now,'updated_at'=>$now,'deleted_at'=>null,'created_by'=>$actorId]+$data;
         $changes=[];
-        if($module==='donations' && ($record['status']??'')==='confirmed' && !empty($record['contact_id'])){
-            $changes=array_merge($changes,$this->syncContactLoyaltyChange((string)$record['contact_id'],$id,(int)$record['amount_satang'],true,$now));
+        if($module==='donations'){
+            if(($record['status']??'')==='confirmed' && !empty($record['contact_id'])){
+                $changes=array_merge($changes,$this->syncContactLoyaltyChange((string)$record['contact_id'],$id,(int)$record['amount_satang'],true,$now));
+            }
+            $donCon=!empty($record['contact_id'])?$this->store->read('contacts',(string)$record['contact_id']):null;
+            $cName=$donCon['name']??'ผู้บริจาค';
+            $cPhone=trim((string)($donCon['phone']??''));
+            $cAddr=trim((string)($donCon['address']??''));
+            $hasAddr=$cAddr!=='';
+            $amtFmt=number_format(((int)($record['amount_satang']??0))/100,2);
+            $hId=(string)($record['hadeeya_id']??'');
+            $hQty=max(1,(int)($record['hadeeya_qty']??1));
+            $hStatus=(string)($record['hadeeya_status']??'');
+            $hItem=$hId!==''?$this->store->read('hadeeya',$hId):null;
+            $hName=$hItem['name']??($hId!==''?'ของฮาดียะห์':'');
+            $noteParts=array_filter([
+                "ยอดบริจาค: ฿{$amtFmt}",
+                $hName!==''?"ขอรับฮาดียะห์: {$hName} ({$hQty} ชิ้น)":($hStatus==='pending'?'ระบุ: รอแจ้งของฮาดียะห์ภายหลัง':''),
+                $cPhone!==''?"โทร: {$cPhone}":'',
+                $hasAddr?"ที่อยู่: {$cAddr}".(!empty($donCon['province'])?" จ.{$donCon['province']}":''):'⚠️ ยังไม่มีที่อยู่จัดส่งในระบบ',
+            ]);
+            if($hStatus==='receive' && !$hasAddr){
+                $tTitle="📞 โทรขอที่อยู่จัดส่งฮาดียะห์: ".($hName?:'ของฮาดียะห์')." ({$cName})";
+                $tPriority='high';
+            } elseif($hStatus==='pending'){
+                $tTitle="📞 โทรสอบถามฮาดียะห์และที่อยู่: {$cName} (฿{$amtFmt})";
+                $tPriority='normal';
+            } elseif($hName!==''){
+                $tTitle="📞 โทรขอบคุณ/ยืนยันจัดส่ง {$hName}: {$cName} (฿{$amtFmt})";
+                $tPriority='normal';
+            } else {
+                $tTitle="📞 โทรขอบคุณ/ติดตามผู้บริจาค: {$cName} (฿{$amtFmt})";
+                $tPriority='normal';
+            }
+            $changes=array_merge($changes,$this->buildAutoTaskChange(
+                $tTitle,
+                (string)($record['contact_id']??''),
+                $actorId,
+                $tPriority,
+                implode(' | ',$noteParts),
+                $now
+            ));
         }
         if($module==='feedback' && ($record['category']??'')==='complaint'){
             $changes=array_merge($changes,$this->buildAutoTaskChange(
