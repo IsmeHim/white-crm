@@ -40,7 +40,33 @@ final class Api {
                     } else $this->auth->require($module);
                     if($module==='users'){$items=[];foreach($this->store->summaries('users') as $s){if(!empty($s['active']))$items[]=['id'=>$s['id'],'name'=>$s['name']];}crm_json(['items'=>array_slice($items,0,300)]);}
                     if(!Schema::module($module))crm_json(['error'=>'Invalid module'],404);
-                    $r=$this->store->listing($module,(string)($_GET['q']??''),[],1,100);
+                    $forModule=(string)($_GET['for_module']??'');
+                    $currentId=(string)($_GET['current_id']??'');
+                    $currentDonationId=(string)($_GET['current_donation_id']??'');
+                    if($module==='donations' && $forModule==='shipments'){
+                        $shippedDonationIds=[];
+                        foreach($this->store->summaries('shipments') as $s){
+                            if(empty($s['deleted_at']) && !empty($s['donation_id']) && ($s['status']??'')!=='cancelled'){
+                                if($currentId!=='' && ($s['id']??'')===$currentId)continue;
+                                if($currentDonationId!=='' && ($s['donation_id']??'')===$currentDonationId)continue;
+                                $shippedDonationIds[$s['donation_id']]=true;
+                            }
+                        }
+                        $q=mb_strtolower(trim((string)($_GET['q']??'')),'UTF-8');
+                        $filtered=[];
+                        foreach($this->store->summaries('donations') as $d){
+                            if(isset($shippedDonationIds[$d['id']]))continue;
+                            if($q!==''){
+                                $st=mb_strtolower(implode(' ',array_map('strval',$d)),'UTF-8');
+                                if(!str_contains($st,$q))continue;
+                            }
+                            $filtered[]=$d;
+                            if(count($filtered)>=100)break;
+                        }
+                        $r=['items'=>$filtered,'total'=>count($filtered)];
+                    } else {
+                        $r=$this->store->listing($module,(string)($_GET['q']??''),[],1,100);
+                    }
                     $hadeeyaNames=[];
                     if($module==='stock_lots'){
                         foreach($this->store->summaries('hadeeya') as $h)$hadeeyaNames[$h['id']]=$h['name']??$h['id'];
@@ -84,6 +110,8 @@ final class Api {
                     $this->contactProfile();break;
                 case 'phone-lookup':
                     $this->phoneLookup();break;
+                case 'shipping-labels':
+                    $this->shippingLabels();break;
                 case 'db-info':
                     $this->dbInfo();break;
                 case 'backup-download':
@@ -328,6 +356,15 @@ final class Api {
             $extraChanges=array_merge($extraChanges,$this->syncContactLoyaltyChange((string)$record['contact_id'],$id,(int)($record['amount_satang']??0),true,$now));
         }
         if($module==='shipments' && $field==='status'){
+            if(isset($body['tracking_no']) && trim((string)$body['tracking_no'])!==''){
+                $record['tracking_no']=trim((string)$body['tracking_no']);
+            }
+            if(isset($body['delivery_company_id']) && trim((string)$body['delivery_company_id'])!==''){
+                $record['delivery_company_id']=trim((string)$body['delivery_company_id']);
+            }
+            if(isset($body['sent_at']) && trim((string)$body['sent_at'])!==''){
+                $record['sent_at']=trim((string)$body['sent_at']);
+            }
             if($value==='shipped' && empty($record['sent_at']))$record['sent_at']=gmdate('Y-m-d');
             if($value==='delivered' && empty($record['received_at']))$record['received_at']=gmdate('Y-m-d');
             $wasDeducted=!empty($current['stock_deducted']);
@@ -845,6 +882,116 @@ final class Api {
             'donations_count'=>count($donations),
             'recent_donations'=>array_slice($donations,0,3),
             'recent_shipments'=>array_slice($shipments,0,3),
+        ]);
+    }
+    private function shippingLabels(): never {
+        $this->auth->require('shipments', 'read');
+        $id = trim((string)($_GET['id'] ?? ''));
+        $idsParam = trim((string)($_GET['ids'] ?? ''));
+        $preparingOnly = !empty($_GET['preparing']);
+
+        $targetIds = [];
+        if ($id !== '') {
+            $targetIds[] = $id;
+        } elseif ($idsParam !== '') {
+            $targetIds = array_filter(array_map('trim', explode(',', $idsParam)));
+        } elseif ($preparingOnly) {
+            foreach ($this->store->summaries('shipments') as $s) {
+                if (($s['status'] ?? '') === 'preparing') {
+                    $targetIds[] = $s['id'];
+                }
+            }
+        }
+
+        if (empty($targetIds)) {
+            crm_json(['error' => 'กรุณาระบุรายการจัดส่งที่ต้องการพิมพ์ใบปะหน้า'], 400);
+        }
+
+        $targetIds = array_slice(array_unique($targetIds), 0, 100);
+
+        $hadeeyaMap = [];
+        foreach ($this->store->summaries('hadeeya') as $h) {
+            $hadeeyaMap[$h['id']] = $h;
+        }
+        $lotMap = [];
+        foreach ($this->store->summaries('stock_lots') as $l) {
+            $lotMap[$l['id']] = $l;
+        }
+        $courierMap = [];
+        foreach ($this->store->summaries('delivery_companies') as $c) {
+            $courierMap[$c['id']] = $c;
+        }
+
+        $config = require ROOT . '/config/app.php';
+        $sender = $config['sender'] ?? [
+            'name' => 'สถานีโทรทัศน์ไวท์แชนแนล (White Channel)',
+            'organization' => 'มูลนิธิศรัทธาชนเพื่อการศึกษาและเด็กกำพร้า',
+            'phone' => '02-103-6000',
+            'address' => '58 ซอยรามคำแหง 60 แยก 7 แขวงหัวหมาก เขตบางกะปิ กรุงเทพฯ 10240',
+        ];
+
+        $labels = [];
+        foreach ($targetIds as $shipId) {
+            $shipment = $this->store->read('shipments', $shipId);
+            if (!$shipment || !empty($shipment['deleted_at'])) {
+                continue;
+            }
+
+            $donation = null;
+            $contact = null;
+            if (!empty($shipment['donation_id'])) {
+                $donation = $this->store->read('donations', (string)$shipment['donation_id']);
+                if ($donation && !empty($donation['contact_id'])) {
+                    $contact = $this->store->read('contacts', (string)$donation['contact_id']);
+                }
+            }
+
+            $hadeeya = $hadeeyaMap[$shipment['hadeeya_id'] ?? ''] ?? null;
+            $lot = $lotMap[$shipment['lot_id'] ?? ''] ?? null;
+            $courier = $courierMap[$shipment['delivery_company_id'] ?? ''] ?? null;
+
+            $recipientName = $contact['name'] ?? 'ผู้รับ (ไม่ระบุนาม)';
+            $recipientPhone = $contact['phone'] ?? '';
+            $recipientAddress = $contact['address'] ?? '';
+            $recipientProvince = $contact['province'] ?? '';
+
+            $trackingNo = trim((string)($shipment['tracking_no'] ?? ''));
+            $barcodeText = $trackingNo !== '' ? $trackingNo : (!empty($donation['barcode']) ? $donation['barcode'] : strtoupper(substr($shipId, 0, 14)));
+            $barcodeSvg = Barcode::code128Svg($barcodeText, 44, 1.5, true);
+
+            $donationBarcode = !empty($donation['barcode']) ? $donation['barcode'] : (!empty($shipment['donation_id']) ? substr((string)$shipment['donation_id'], 0, 12) : '');
+
+            $labels[] = [
+                'shipment_id' => $shipId,
+                'status' => $shipment['status'] ?? 'preparing',
+                'tracking_no' => $trackingNo,
+                'barcode_text' => $barcodeText,
+                'barcode_svg' => $barcodeSvg,
+                'donation_barcode' => $donationBarcode,
+                'courier_name' => $courier['name'] ?? 'ขนส่งทั่วไป / พัสดุด่วน',
+                'recipient' => [
+                    'name' => $recipientName,
+                    'phone' => $recipientPhone,
+                    'address' => $recipientAddress,
+                    'province' => $recipientProvince,
+                ],
+                'item' => [
+                    'name' => $hadeeya['name'] ?? 'ของที่ระลึก ฮาดียะห์ White Channel',
+                    'sku' => $hadeeya['sku'] ?? '',
+                    'unit' => $hadeeya['unit'] ?? 'ชิ้น',
+                    'quantity' => (int)($shipment['quantity'] ?? 1),
+                    'lot_code' => $lot['lot_code'] ?? ($shipment['lot_id'] ?? '—'),
+                    'location' => $lot['location'] ?? '',
+                ],
+                'note' => trim((string)($shipment['note'] ?? '')),
+                'created_at' => $shipment['created_at'] ?? '',
+            ];
+        }
+
+        crm_json([
+            'sender' => $sender,
+            'count' => count($labels),
+            'labels' => $labels,
         ]);
     }
     private function dbInfo(): never {

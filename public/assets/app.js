@@ -164,7 +164,8 @@
   function pillClass(value){
     const success=['active','confirmed','delivered','done','resolved','published','1'];
     const danger=['cancelled','closed','returned','urgent','0'];
-    return success.includes(String(value))?'green':danger.includes(String(value))?'red':'yellow';
+    const info=['shipped','progress','review'];
+    return success.includes(String(value))?'green':danger.includes(String(value))?'red':info.includes(String(value))?'blue':'yellow';
   }
   function humanValue(column,value,field,row=null,module=null,canWrite=false){
     if(value===null||value===undefined||value==='')return '<span class="cell-muted">—</span>';
@@ -199,6 +200,11 @@
     if(field?.type==='select'){
       let label=field.options?.[String(value)]||String(value);
       let cls=pillClass(value);
+      if(module==='shipments' && column==='status'){
+        const iconMap={preparing:'📦',shipped:'🚚',delivered:'✓',returned:'↺',cancelled:'✕'};
+        const icon=iconMap[String(value)]||'•';
+        return `<span class="pill ${cls}" style="font-size:11.5px;padding:5px 11px;gap:5px;font-weight:800;display:inline-flex;align-items:center">${icon} ${esc(label)}</span>`;
+      }
       if(canWrite && row && module && ['status','active','priority'].includes(column)){
         return `<select class="status-pill-select ${cls}" data-quick-module="${esc(module)}" data-quick-id="${esc(row.id)}" data-quick-field="${esc(column)}" title="คลิกเพื่อเปลี่ยนสถานะทันที">${Object.entries(field.options).map(([k,v])=>`<option value="${esc(k)}" ${String(value)===k?'selected':''}>${esc(v)}</option>`).join('')}</select>`;
       }
@@ -210,11 +216,32 @@
     if(!canWrite)return '';
     if(m==='tasks' && row.status!=='done')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="done" title="ทำเครื่องหมายว่าเสร็จสิ้นทันที">✓ เสร็จสิ้น</button>`;
     if(m==='donations' && row.status==='pending')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="confirmed" title="ยืนยันยอดบริจาคทันที">✓ ยืนยันยอด</button>`;
-    if(m==='shipments' && row.status==='preparing')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="shipped" title="เปลี่ยนเป็นจัดส่งแล้วทันที">🚚 ส่งแล้ว</button>`;
-    if(m==='shipments' && row.status==='shipped')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="delivered" title="เปลี่ยนเป็นรับสำเร็จทันที">✓ รับสำเร็จ</button>`;
     if(m==='feedback' && row.status!=='resolved')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="resolved" title="เปลี่ยนเป็นแก้ไขแล้วทันที">✓ แก้ไขแล้ว</button>`;
     if(m==='announcements' && row.status==='draft')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="published" title="เผยแพร่ประกาศทันที">✦ เผยแพร่</button>`;
     return '';
+  }
+  function rowActionButtons(m,row,canWrite){
+    if(m==='shipments'){
+      const st=row.status||'preparing';
+      let acts='';
+      if(st==='preparing'){
+        acts+=`<button type="button" class="btn small primary" data-print-shipment="${esc(row.id)}" title="พิมพ์ใบปะหน้าพัสดุสำหรับกล่องนี้">🖨 ป้ายส่งของ</button>`;
+        if(canWrite){
+          acts+=`<button type="button" class="btn small quick-act-btn" data-ship-dispatch="${esc(row.id)}" title="บันทึกเลขพัสดุและจัดส่ง">🚚 ส่งพัสดุ</button>`;
+        }
+      } else if(st==='shipped'){
+        if(canWrite){
+          acts+=`<button type="button" class="btn small primary quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="delivered" title="ผู้รับได้รับของเรียบร้อยแล้ว">✓ รับสำเร็จ</button>`;
+          acts+=`<button type="button" class="btn small ghost" data-ship-return="${esc(row.id)}" title="พัสดุตีกลับ (คืนสต็อกเข้าคลัง)" style="color:#e05244">↺ ตีกลับ</button>`;
+        }
+      }
+      acts+=`<button class="btn small" data-view="${esc(row.id)}">ดูข้อมูล</button>`;
+      if(canWrite && !['delivered','returned','cancelled'].includes(st)){
+        acts+=`<button class="btn small ghost" data-edit="${esc(row.id)}" title="แก้ไขข้อมูล">แก้ไข</button>`;
+      }
+      return acts;
+    }
+    return `${quickActionBtn(m,row,canWrite)}<button class="btn small" data-view="${esc(row.id)}">${m==='contacts'?'♙ ดูโปรไฟล์ 360°':'ดูข้อมูล'}</button>${canWrite?`<button class="btn small ghost" data-edit="${esc(row.id)}">แก้ไข</button>`:''}`;
   }
   async function updateQuickStatus(module,id,field,value,el=null){
     if(el)el.disabled=true;
@@ -254,7 +281,7 @@
     $('#page-content').innerHTML=header('MANAGEMENT / '+m.toUpperCase(),schema.label,'จัดการข้อมูลพร้อมระบบค้นหาและบันทึกประวัติการเปลี่ยนแปลง',actions)+
       (showDateFilter?renderDateFilterBar():'')+
       donationSummaryStrip+
-      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div>${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${quickActionBtn(m,row,canWrite)}<button class="btn small" data-view="${esc(row.id)}">${m==='contacts'?'♙ ดูโปรไฟล์ 360°':'ดูข้อมูล'}</button>${canWrite?`<button class="btn small ghost" data-edit="${esc(row.id)}">แก้ไข</button>`:''}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
+      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div><div class="toolbar-right" style="display:flex;gap:8px">${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div></div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${rowActionButtons(m,row,canWrite)}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
     if(showDateFilter)wireDateFilterBar();
     $('[data-action="new"]')?.addEventListener('click',()=>openForm(m));
     $('[data-action="export"]')?.addEventListener('click',()=>{
@@ -271,6 +298,9 @@
     $('#status-filter')?.addEventListener('change',e=>{state.status=e.target.value;state.page=1;render();});
     document.querySelectorAll('[data-view]').forEach(b=>b.addEventListener('click',()=>viewRecord(m,b.dataset.view)));
     document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(m,b.dataset.edit)));
+    document.querySelectorAll('[data-print-shipment]').forEach(b=>b.addEventListener('click',()=>openShippingLabels({id:b.dataset.printShipment})));
+    document.querySelectorAll('[data-ship-dispatch]').forEach(b=>b.addEventListener('click',()=>openQuickDispatchModal(b.dataset.shipDispatch)));
+    document.querySelectorAll('[data-ship-return]').forEach(b=>b.addEventListener('click',()=>confirmReturnShipment(b.dataset.shipReturn)));
     document.querySelectorAll('[data-quick-id]').forEach(sel=>sel.addEventListener('change',e=>{
       updateQuickStatus(sel.dataset.quickModule,sel.dataset.quickId,sel.dataset.quickField,e.target.value,sel);
     }));
@@ -278,7 +308,7 @@
       updateQuickStatus(m,btn.dataset.qactId,'status',btn.dataset.qactVal,btn);
     }));
   }
-  async function fieldHTML(k,field,value='',editing=false){
+  async function fieldHTML(k,field,value='',editing=false,forModule='',recordId=''){
     const type=field.type;let input='';const id='f_'+k;const required=field.required?'required':'';
     const isReadonly=Boolean(field.readonly || (editing && field.readonly_on_edit));
     const ph=(editing && field.readonly_on_edit)?'แก้ไขยอดได้ที่ปุ่ม "ปรับสต็อก" ในตาราง':(field.placeholder||('กรอก'+field.label+'…'));
@@ -295,7 +325,7 @@
       input=`<div class="relation-picker">
         <span class="relation-icon" aria-hidden="true">⌕</span>
         <input type="hidden" id="${id}" name="${esc(k)}" value="${esc(value)}">
-        <input class="relation-search" data-rel="${esc(field.module)}" data-target="${id}" autocomplete="off" placeholder="${esc(field.placeholder||'คลิกเพื่อเลือก หรือพิมพ์ชื่อ/รหัสเพื่อค้นหา…')}" value="${esc(known)}">
+        <input class="relation-search" data-rel="${esc(field.module)}" data-for-module="${esc(forModule)}" data-current-id="${esc(recordId)}" data-current-val="${esc(value)}" data-target="${id}" autocomplete="off" placeholder="${esc(field.placeholder||'คลิกเพื่อเลือก หรือพิมพ์ชื่อ/รหัสเพื่อค้นหา…')}" value="${esc(known)}">
         <button type="button" class="relation-clear ${value?'':'hidden'}" title="ล้างค่าที่เลือก" aria-label="ล้างค่า">×</button>
         <div class="relation-results hidden"></div>
       </div>`;
@@ -439,7 +469,13 @@
       results.addEventListener('mousedown',e=>e.preventDefault());
       const loadOptions=async(q)=>{
         try{
-          const r=await api('options',{module:input.dataset.rel,q});
+          const r=await api('options',{
+            module:input.dataset.rel,
+            q,
+            for_module:input.dataset.forModule||'',
+            current_id:input.dataset.currentId||'',
+            current_donation_id:input.dataset.currentVal||''
+          });
           const isContacts=(input.dataset.rel==='contacts');
           let createBtnHtml='';
           if(isContacts && roleAllows('contacts',true)){
@@ -523,8 +559,8 @@
         if(module==='feedback'){record.category??='suggestion';record.channel??='phone';record.status??='new';}
         if(module==='announcements')record.status??='published';
       }
-      const fields=await Promise.all(Object.entries(schema.fields).map(([k,v])=>fieldHTML(k,v,record[k]??'',!!id)));
-      const shipmentStockNote=module==='shipments'?`<div class="secondary-note" style="margin-top:16px"><strong>📦 ระบบอัตโนมัติสำหรับการจัดส่ง:</strong> เลือกฮาดียะห์แล้วระบบจะเลือกล็อตสต็อกที่มีของ (FIFO) ให้อัตโนมัติ · เลือกรายการบริจาคแล้วดึงที่อยู่ผู้รับให้อัตโนมัติ · พิมพ์เลขพัสดุแล้วปรับสถานะเป็น <em>จัดส่งแล้ว</em> พร้อมลงวันที่ส่งให้อัตโนมัติครับ</div>`:'';
+      const fields=await Promise.all(Object.entries(schema.fields).map(([k,v])=>fieldHTML(k,v,record[k]??'',!!id,module,id||'')));
+      const shipmentStockNote=module==='shipments'?`<div class="secondary-note" style="margin-top:16px"><strong>📦 ระบบอัตโนมัติสำหรับการจัดส่ง:</strong> เลือกฮาดียะห์แล้วระบบจะเลือกล็อตสต็อกที่มีของ (FIFO) ให้อัตโนมัติ · เลือกรายการบริจาคแล้วดึงที่อยู่ผู้รับให้อัตโนมัติ · พิมพ์เลขพัสดุแล้วปรับสถานะเป็น <em>จัดส่งแล้ว</em> พร้อมลงวันที่ส่งให้อัตโนมัติ</div>`:'';
       modal((id?'แก้ไข':'เพิ่ม')+' '+schema.label,`<form id="record-form"><div class="form-grid">${fields.join('')}</div>${shipmentStockNote}<div class="form-actions">${id&&roleAllows(module,true)&&state.user.role==='admin'?`<button type="button" class="btn danger" id="delete-record">ลบข้อมูล</button>`:''}<button type="button" class="btn" id="cancel-modal">ยกเลิก</button><button type="submit" class="btn primary">บันทึกข้อมูล</button></div></form>`);
       $('#cancel-modal').onclick=closeModal;
       const formEl=$('#record-form');
@@ -684,7 +720,8 @@
                 <span>วันที่ส่ง: ${esc(dateDisplay(sh.sent_at||sh.created_at))}</span>
               </div>
             </div>
-            <div class="timeline-card-right">
+            <div class="timeline-card-right" style="display:flex;gap:5px;align-items:center">
+              <button type="button" class="btn small primary" data-print-shipment="${esc(sh.id)}" title="พิมพ์ใบปะหน้าพัสดุ" style="padding:2px 8px;font-size:11px">🖨 พิมพ์ป้าย</button>
               <button type="button" class="btn small ghost" data-view-ship="${esc(sh.id)}">เปิดดู</button>
             </div>
           </div>`).join('')}</div>`:`<div class="empty" style="padding:30px">ยังไม่มีประวัติการจัดส่งฮาดียะห์</div>`}
@@ -725,6 +762,7 @@
       document.querySelectorAll('[data-ship-don]').forEach(b=>b.addEventListener('click',()=>openForm('shipments',null,{donation_id:b.dataset.shipDon})));
       document.querySelectorAll('[data-view-don]').forEach(b=>b.addEventListener('click',()=>viewRecord('donations',b.dataset.viewDon)));
       document.querySelectorAll('[data-view-ship]').forEach(b=>b.addEventListener('click',()=>viewRecord('shipments',b.dataset.viewShip)));
+      document.querySelectorAll('[data-print-shipment]').forEach(b=>b.addEventListener('click',()=>openShippingLabels({id:b.dataset.printShipment})));
       document.querySelectorAll('[data-view-task]').forEach(b=>b.addEventListener('click',()=>viewRecord('tasks',b.dataset.viewTask)));
     }catch(e){toast(e.message,true);}
   }
@@ -737,12 +775,357 @@
         const stBadge=r.stock_deducted?`<span class="pill green">✓ ตัดสต็อกจากล็อตอัตโนมัติแล้ว (${num(r.deducted_qty||r.quantity||1)} ชิ้น)</span>`:`<span class="pill yellow">↺ คืนสต็อกแล้ว / ยังไม่ตัดสต็อก</span>`;
         fields+=`<div class="detail-block"><div class="detail-label">สถานะการตัดสต็อกคลังสินค้า</div><div class="detail-value">${stBadge}</div></div>`;
       }
-      modal('รายละเอียด • '+schema.label,fields+`<div class="detail-block"><div class="detail-label">รหัสระบบ / เวอร์ชัน</div><div class="detail-value">${esc(r.id)} / v${esc(r.version)}</div></div><div class="form-actions">${module==='contacts'?btn('♙ โปรไฟล์ 360°','profile',''):''}${module==='donations'&&roleAllows('shipments',true)?btn('▰ สร้างรายการจัดส่งฮาดียะห์','create-shipment','primary'):''}${module==='stock_lots'&&roleAllows('inventory_moves',true)?btn('⇄ ปรับสต็อก','movement','primary'):''}${['shipments','campaigns'].includes(module)&&roleAllows(module,true)?btn('⇧ แนบหลักฐาน / ภาพ','upload',''):''}${roleAllows(module,true)&&!schema.readonly?btn('แก้ไขรายการ','edit',''):''}</div>`);
+      modal('รายละเอียด • '+schema.label,fields+`<div class="detail-block"><div class="detail-label">รหัสระบบ / เวอร์ชัน</div><div class="detail-value">${esc(r.id)} / v${esc(r.version)}</div></div><div class="form-actions">${module==='contacts'?btn('♙ โปรไฟล์ 360°','profile',''):''}${module==='donations'&&roleAllows('shipments',true)?btn('▰ สร้างรายการจัดส่งฮาดียะห์','create-shipment','primary'):''}${module==='shipments'?btn('🖨 พิมพ์ใบปะหน้าพัสดุ','print-label','primary'):''}${module==='stock_lots'&&roleAllows('inventory_moves',true)?btn('⇄ ปรับสต็อก','movement','primary'):''}${['shipments','campaigns'].includes(module)&&roleAllows(module,true)?btn('⇧ แนบหลักฐาน / ภาพ','upload',''):''}${roleAllows(module,true)&&!schema.readonly?btn('แก้ไขรายการ','edit',''):''}</div>`);
       $('[data-action="edit"]')?.addEventListener('click',()=>openForm(module,id));
       $('[data-action="movement"]')?.addEventListener('click',()=>openMovement(id));
       $('[data-action="upload"]')?.addEventListener('click',()=>openUpload(module,id));
       $('[data-action="create-shipment"]')?.addEventListener('click',()=>openForm('shipments',null,{donation_id:id}));
+      $('[data-action="print-label"]')?.addEventListener('click',()=>openShippingLabels({id}));
     }catch(e){toast(e.message,true);}
+  }
+  async function openShippingLabels(opts={}){
+    try{
+      toast('กำลังเตรียมข้อมูลใบปะหน้าพัสดุ…');
+      const params={};
+      if(opts.id)params.id=opts.id;
+      else if(opts.ids)params.ids=Array.isArray(opts.ids)?opts.ids.join(','):opts.ids;
+      else if(opts.preparing)params.preparing=1;
+      const data=await api('shipping-labels',params);
+      if(!data.labels||data.labels.length===0){
+        toast('ไม่พบรายการที่พร้อมพิมพ์ใบปะหน้า',true);
+        return;
+      }
+      const sender=data.sender||{};
+      const labels=data.labels;
+      const today=fmtIsoDate(new Date());
+
+      const wcLogoSvg=`<svg viewBox="0 0 256 256" width="34" height="34" xmlns="http://www.w3.org/2000/svg"><rect width="256" height="256" rx="62" fill="#172a42"/><path d="M46 77l30 103h28l24-60 24 60h28l30-103h-31l-17 65-22-65h-24l-22 65-17-65z" fill="white"/><circle cx="210" cy="184" r="15" fill="#a2bb3b"/></svg>`;
+
+      function cleanShippingNote(note){
+        if(!note || !note.trim()) return '';
+        const lines=note.split(/[|\n]/).map(s=>s.trim()).filter(Boolean);
+        const filtered=lines.filter(line=>{
+          if(/^ผู้รับ\s*[:：]/i.test(line)) return false;
+          if(/^โทร\s*[:：]/i.test(line)) return false;
+          if(/^ที่อยู่\s*[:：]/i.test(line)) return false;
+          return true;
+        });
+        return filtered.join(' · ').trim();
+      }
+
+      function formatShippingRecipientAddress(rawAddress, fallbackProvince=''){
+        if(!rawAddress || !rawAddress.trim()) return '<div class="ship-addr-base muted">— ไม่ระบุที่อยู่จัดส่ง —</div>';
+        let addr=rawAddress.trim();
+        let zipcode='';
+        const zipMatch=addr.match(/\b(\d{5})\b/);
+        if(zipMatch){
+          zipcode=zipMatch[1];
+          addr=addr.replace(zipMatch[0],'').trim();
+        }
+        let province=fallbackProvince||'';
+        const provMatch=addr.match(/(?:จังหวัด|จ\.)\s*([^\s]+)/u) || addr.match(/(กรุงเทพมหานคร|กรุงเทพฯ|กทม\.?)/u);
+        if(provMatch){
+          province=(provMatch[1]==='กรุงเทพฯ'||provMatch[1]==='กทม.'||provMatch[1]==='กทม')?'กรุงเทพมหานคร':(provMatch[1].startsWith('จ')?provMatch[1]:(provMatch[2]||provMatch[1]));
+        }
+        let district='';
+        const distMatch=addr.match(/(อำเภอ|อ\.|เขต)\s*([^\s,]+)/u);
+        if(distMatch){
+          district=`${distMatch[1]} ${distMatch[2]}`;
+        }
+        let subdistrict='';
+        const subMatch=addr.match(/(ตำบล|ต\.|แขวง)\s*([^\s,]+)/u);
+        if(subMatch){
+          subdistrict=`${subMatch[1]} ${subMatch[2]}`;
+        }
+
+        let cutIndex=addr.length;
+        for(const prefix of [subdistrict, district, 'จังหวัด', 'จ.', 'กรุงเทพ']){
+          if(prefix){
+            const kw=prefix.split(' ')[0];
+            const pos=addr.indexOf(kw);
+            if(pos>0 && pos<cutIndex) cutIndex=pos;
+          }
+        }
+        const baseStreet=addr.substring(0,cutIndex).trim().replace(/[,]+$/,'');
+        const zipBoxes=zipcode?`<div class="ship-zipcode-boxes" title="รหัสไปรษณีย์ ${esc(zipcode)}">${zipcode.split('').map(d=>`<span class="ship-zip-digit">${esc(d)}</span>`).join('')}</div>`:'';
+
+        let html='<div class="ship-address-structured">';
+        if(baseStreet && (subdistrict || district || province)){
+          html+=`<div class="ship-addr-base">${esc(baseStreet)}</div>`;
+          if(subdistrict || district){
+            html+=`<div class="ship-addr-subdist">
+              ${subdistrict?`<span>${esc(subdistrict)}</span>`:''}
+              ${district?`<span>${esc(district)}</span>`:''}
+            </div>`;
+          }
+          html+=`<div class="ship-addr-province">
+            <span class="ship-prov-tag">จ. ${esc(province||'—')}</span>
+            ${zipBoxes}
+          </div>`;
+        } else {
+          html+=`<div class="ship-addr-base">${esc(rawAddress)}</div>`;
+          if(province && !rawAddress.includes(province)){
+            html+=`<div class="ship-addr-province"><span class="ship-prov-tag">จ. ${esc(province)}</span> ${zipBoxes}</div>`;
+          } else if(zipBoxes){
+            html+=`<div class="ship-addr-province">${zipBoxes}</div>`;
+          }
+        }
+        html+='</div>';
+        return html;
+      }
+
+      const modalHtml=`
+        <div id="shipping-label-modal" class="label-modal-backdrop">
+          <div class="label-modal-box">
+            <div class="label-modal-head">
+              <div class="label-modal-title">
+                <span>🖨 พิมพ์ใบปะหน้าพัสดุฮาดียะห์ (Shipping Labels)</span>
+                <span class="pill green">${num(labels.length)} รายการ</span>
+              </div>
+              <div class="label-modal-actions">
+                <div class="label-paper-switch" title="เลือกขนาดกระดาษสำหรับพิมพ์">
+                  <button type="button" class="label-paper-btn active" data-paper="a6">🏷 A6 (105×148 มม. / สติกเกอร์แปะกล่อง)</button>
+                  <button type="button" class="label-paper-btn" data-paper="a5">📄 A5 (148×210 มม. / ครึ่ง A4)</button>
+                  <button type="button" class="label-paper-btn" data-paper="a4">📑 A4 (4 ป้าย/แผ่น)</button>
+                </div>
+                <button type="button" class="btn primary btn-label-action" id="do-print-labels">🖨 สั่งพิมพ์ (Print)</button>
+                <button type="button" class="btn btn-label-action" id="do-pdf-labels" title="พิมพ์เป็นไฟล์ PDF ผ่านหน้าต่างเบราว์เซอร์">📥 บันทึก PDF</button>
+                <button type="button" class="btn" id="close-label-modal">✕ ปิด</button>
+              </div>
+            </div>
+            <div class="label-notice-bar">
+              <div>💡 <strong>คำแนะนำการพิมพ์:</strong> รองรับเครื่องพิมพ์ความร้อน (A6) และเครื่องพิมพ์ทั่วไป (A5, A4) · ในหน้าต่างพิมพ์แนะนำตั้งค่า Margins เป็น <em>"None (ไม่มีขอบ)"</em> เพื่อสัดส่วนที่พอดีที่สุด</div>
+              <div class="muted">วันที่: ${esc(today)}</div>
+            </div>
+            <div class="label-preview-stage">
+              <div id="print-labels-container" class="paper-a6">
+                ${labels.map(lbl=>{
+                  const cleanNote=cleanShippingNote(lbl.note);
+                  const formattedPhone=formatThaiPhone(lbl.recipient.phone||'');
+                  const addrHtml=formatShippingRecipientAddress(lbl.recipient.address, lbl.recipient.province);
+                  const barcodeText=lbl.tracking_no || lbl.barcode_text || '';
+                  return `
+                    <div class="ship-label">
+                      <!-- Header: Brand & Courier -->
+                      <div class="ship-label-head">
+                        <div class="ship-brand-group">
+                          <div class="ship-brand-logo">${wcLogoSvg}</div>
+                          <div class="ship-brand-text">
+                            <span class="ship-brand-title">WHITE CHANNEL</span>
+                            <span class="ship-brand-sub">ใบนำส่งพัสดุของที่ระลึก (ฮาดียะห์)</span>
+                            <span class="ship-brand-org">มูลนิธิศรัทธาชนเพื่อการศึกษาและเด็กกำพร้า</span>
+                          </div>
+                        </div>
+                        <div class="ship-head-meta">
+                          <span class="ship-courier-tag">🚚 ${esc(lbl.courier_name||'พัสดุด่วน')}</span>
+                        </div>
+                      </div>
+
+                      <!-- Sender & Internal Reference Bar -->
+                      <div class="ship-sender-bar">
+                        <div class="ship-sender-info">
+                          <div class="ship-sender-label">ผู้ส่ง (FROM / SENDER)</div>
+                          <div class="ship-sender-name">${esc(sender.name||'สถานีโทรทัศน์ไวท์แชนแนล (White Channel)')}</div>
+                          <div class="ship-sender-detail">${esc(sender.address||'58 ซ.รามคำแหง 60 แยก 7 แขวงหัวหมาก เขตบางกะปิ กทม. 10240')} · โทร. ${esc(sender.phone||'02-103-6000')}</div>
+                        </div>
+                        <div class="ship-ref-info">
+                          <div class="ship-ref-title">เลขอ้างอิงบริจาค</div>
+                          <div class="ship-ref-code">${esc(lbl.donation_barcode||lbl.shipment_id.slice(0,12))}</div>
+                        </div>
+                      </div>
+
+                      <!-- Recipient Card (High Prominence) -->
+                      <div class="ship-recipient-card">
+                        <div class="ship-to-header">
+                          <span class="ship-to-badge">📍 ผู้รับพัสดุ (TO / RECIPIENT)</span>
+                          <span class="ship-to-subtag">✓ ตรวจสอบผู้รับแล้ว</span>
+                        </div>
+                        <div class="ship-to-name">${esc(lbl.recipient.name||'ผู้บริจาค (ไม่ระบุนาม)')}</div>
+                        <div class="ship-to-phone-row">
+                          <div class="ship-phone-badge" title="เบอร์โทรผู้รับสำหรับเจ้าหน้าที่ขนส่ง">
+                            <span class="phone-icon">📞</span>
+                            <span class="phone-digits">${esc(formattedPhone || '—')}</span>
+                          </div>
+                        </div>
+                        ${addrHtml}
+                      </div>
+
+                      <!-- Packing Checklist (Warehouse & Picking) -->
+                      <div class="ship-checklist-card">
+                        <div class="ship-checklist-title">
+                          <span>📦 รายการของที่ระลึกที่ต้องบรรจุ (Packing Checklist)</span>
+                        </div>
+                        <table class="ship-checklist-table">
+                          <thead>
+                            <tr>
+                              <th class="ship-th-item">รายการของที่ระลึก</th>
+                              <th class="ship-th-lot">รหัส LOT</th>
+                              <th class="ship-th-loc">ที่เก็บ</th>
+                              <th class="ship-th-qty">จำนวน</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            <tr>
+                              <td class="ship-td-item">
+                                <div class="ship-item-name">${esc(lbl.item.name)}</div>
+                                ${lbl.item.sku?`<div class="ship-item-sku">SKU: ${esc(lbl.item.sku)}</div>`:''}
+                              </td>
+                              <td class="ship-td-lot"><span class="ship-lot-badge">${esc(lbl.item.lot_code||'—')}</span></td>
+                              <td class="ship-td-loc"><span class="ship-loc-badge">${esc(lbl.item.location||'คลังหลัก')}</span></td>
+                              <td class="ship-td-qty"><span class="ship-qty-badge">${num(lbl.item.quantity)} ${esc(lbl.item.unit)}</span></td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+
+                      <!-- Delivery Note (Only genuine notes, no duplicate recipient) -->
+                      ${cleanNote?`
+                        <div class="ship-custom-note">
+                          <strong>📌 หมายเหตุจัดส่ง:</strong> ${esc(cleanNote)}
+                        </div>
+                      `:''}
+
+                      <!-- Barcode & Tracking Section -->
+                      <div class="ship-barcode-card">
+                        <div class="ship-barcode-wrap">
+                          ${lbl.barcode_svg||''}
+                        </div>
+                        <div class="ship-tracking-title">
+                          ${lbl.tracking_no?`TRACKING NO: ${esc(lbl.tracking_no)}`:`REF: ${esc(barcodeText)}`}
+                        </div>
+                        <div class="ship-tracking-refs">
+                          <span>รหัสจัดส่ง: <code>${esc(lbl.shipment_id)}</code></span>
+                          ${lbl.donation_barcode?`<span>อ้างอิง: <code>${esc(lbl.donation_barcode)}</code></span>`:''}
+                        </div>
+                      </div>
+                    </div>
+                  `;
+                }).join('')}
+              </div>
+            </div>
+          </div>
+        </div>
+      `;
+      $('#shipping-label-modal')?.remove();
+      document.body.insertAdjacentHTML('beforeend',modalHtml);
+      const modalEl=$('#shipping-label-modal');
+      const containerEl=$('#print-labels-container');
+      modalEl.querySelectorAll('[data-paper]').forEach(b=>{
+        b.onclick=()=>{
+          modalEl.querySelectorAll('[data-paper]').forEach(x=>x.classList.remove('active'));
+          b.classList.add('active');
+          const paper=b.dataset.paper;
+          containerEl.className='paper-'+paper;
+        };
+      });
+
+      const executePrint=()=>{
+        const oldTitle=document.title;
+        document.title=`Shipping_Labels_WhiteChannel_${today}`;
+        window.print();
+        setTimeout(()=>{document.title=oldTitle;},1000);
+      };
+
+      $('#do-print-labels').onclick=executePrint;
+      $('#do-pdf-labels').onclick=()=>{
+        toast('เลือก "Save as PDF" หรือ "บันทึกเป็น PDF" ในหน้าต่างพิมพ์');
+        executePrint();
+      };
+
+      const closePrintModal=()=>{modalEl.remove();document.removeEventListener('keydown',handleEsc);};
+      const handleEsc=e=>{if(e.key==='Escape')closePrintModal();};
+      $('#close-label-modal').onclick=closePrintModal;
+      modalEl.onclick=e=>{if(e.target===modalEl)closePrintModal();};
+      document.addEventListener('keydown',handleEsc);
+    }catch(e){toast(e.message||'ไม่สามารถโหลดใบปะหน้าพัสดุได้',true);}
+  }
+  async function openQuickDispatchModal(shipmentId){
+    try{
+      const r=(await api('record',{module:'shipments',id:shipmentId})).record;
+      await optionNames('delivery_companies').catch(()=>({}));
+      await optionNames('hadeeya').catch(()=>({}));
+      const couriers=state.options.delivery_companies||{};
+      const today=fmtIsoDate(new Date());
+      const hadeeyaName=state.options.hadeeya?.[r.hadeeya_id]||r.hadeeya_id||'ฮาดียะห์';
+
+      const modalHtml=`
+        <form id="quick-dispatch-form" class="stack" style="display:grid;gap:16px">
+          <div style="background:var(--card-sub);padding:13px 15px;border-radius:11px;border:1px solid var(--line);font-size:12.5px;line-height:1.55">
+            <div><strong>รายการจัดส่ง:</strong> <span class="muted">${esc(r.id)}</span></div>
+            <div><strong>ของที่ระลึก:</strong> <strong>${esc(hadeeyaName)}</strong> (จำนวน ${num(r.quantity||1)} ชิ้น)</div>
+          </div>
+
+          <label class="form-field">
+            <span class="field-title">หมายเลขพัสดุ (Tracking No.)</span>
+            <input type="text" name="tracking_no" id="dispatch-tracking-input" value="${esc(r.tracking_no||'')}" placeholder="เช่น EF123456789TH หรือยิงบาร์โค้ดจากม้วนสติกเกอร์ขนส่ง…" autofocus>
+          </label>
+
+          <div class="form-grid">
+            <label class="form-field">
+              <span class="field-title">บริษัทขนส่ง</span>
+              <select name="delivery_company_id">
+                <option value="">— เลือกขนส่ง (ถ้ามี) —</option>
+                ${Object.entries(couriers).map(([cid,cname])=>`<option value="${esc(cid)}" ${r.delivery_company_id===cid?'selected':''}>${esc(cname)}</option>`).join('')}
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span class="field-title">วันที่ส่งพัสดุ</span>
+              <input type="date" name="sent_at" value="${esc(r.sent_at||today)}">
+            </label>
+          </div>
+
+          <p class="secondary-note" style="margin:0">📦 เมื่อบันทึก ระบบจะปรับสถานะเป็น <strong>"จัดส่งแล้ว"</strong> และตัดสต็อกจากล็อตให้อัตโนมัติ</p>
+
+          <div class="form-actions" style="margin-top:14px;padding-top:14px">
+            <button type="button" class="btn" id="cancel-modal">ยกเลิก</button>
+            <button type="submit" class="btn primary" style="font-weight:800;gap:6px">🚚 บันทึกการจัดส่ง</button>
+          </div>
+        </form>
+      `;
+
+      modal('🚚 บันทึกการจัดส่งพัสดุ', modalHtml);
+      $('#cancel-modal').onclick=closeModal;
+      setTimeout(()=>$('#dispatch-tracking-input')?.focus(),120);
+
+      $('#quick-dispatch-form').onsubmit=async e=>{
+        e.preventDefault();
+        const fd=new FormData(e.target);
+        const trackingNo=(fd.get('tracking_no')||'').trim();
+        const courierId=fd.get('delivery_company_id')||'';
+        const sentAt=fd.get('sent_at')||today;
+        try{
+          await api('quick-status',{},'POST',{
+            module:'shipments',
+            id:shipmentId,
+            field:'status',
+            value:'shipped',
+            tracking_no:trackingNo,
+            delivery_company_id:courierId,
+            sent_at:sentAt
+          });
+          delete state.options.stock_lots;
+          closeModal();
+          toast('บันทึกการจัดส่งเรียบร้อยแล้ว');
+          render();
+        }catch(err){
+          toast(err.message,true);
+        }
+      };
+    }catch(err){
+      toast(err.message,true);
+    }
+  }
+  async function confirmReturnShipment(shipmentId){
+    if(!confirm('ยืนยันบันทึกเป็น "พัสดุตีกลับ" หรือไม่?\n\n• ระบบจะปรับสถานะเป็น ตีกลับ (คืนสต็อก)\n• นำของที่ระลึกคืนเข้าสต็อกในคลังให้อัตโนมัติ\n• สร้างงานติดตามให้ Call Center โทรตรวจสอบที่อยู่ใหม่'))return;
+    try{
+      await api('quick-status',{},'POST',{module:'shipments',id:shipmentId,field:'status',value:'returned'});
+      delete state.options.stock_lots;
+      toast('บันทึกพัสดุตีกลับและคืนสต็อกเรียบร้อย');
+      render();
+    }catch(err){
+      toast(err.message,true);
+    }
   }
   function openUpload(module,id){
     modal('แนบไฟล์ / หลักฐาน',`<form id="upload-form" class="stack" style="display:grid;gap:16px"><label>เลือกไฟล์ PNG / JPG / WEBP / PDF ขนาดสูงสุด 10 MB<input type="file" name="file" accept="image/png,image/jpeg,image/webp,application/pdf" required></label><div class="secondary-note">ไฟล์ถูกเก็บนอกโฟลเดอร์ Public และเปิดผ่าน API ที่ตรวจสิทธิ์เท่านั้น</div><div class="form-actions"><button type="button" class="btn" id="cancel-modal">ยกเลิก</button><button type="submit" class="btn primary">อัปโหลด</button></div></form>`);
