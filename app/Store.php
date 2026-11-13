@@ -29,18 +29,40 @@ final class Store
         }
 
         $dbFile = $this->base . '/crm.sqlite';
-        $this->pdo = new PDO('sqlite:' . $dbFile, null, null, [
+        $seedFile = $this->base . '/crm.sqlite.seed';
+        if (!is_file($dbFile) && is_file($seedFile)) {
+            @copy($seedFile, $dbFile);
+        }
+
+        $this->pdo = $this->connectPdo($dbFile);
+        $this->initSchema();
+
+        // Auto-recover empty DB from seed template (e.g. after fresh git pull)
+        if (is_file($seedFile)) {
+            $userCount = (int)$this->pdo->query("SELECT COUNT(*) FROM records WHERE collection = 'users'")->fetchColumn();
+            if ($userCount === 0) {
+                $this->pdo = new PDO('sqlite::memory:');
+                @unlink($dbFile . '-wal');
+                @unlink($dbFile . '-shm');
+                @copy($seedFile, $dbFile);
+                $this->pdo = $this->connectPdo($dbFile);
+                $this->initSchema();
+            }
+        }
+    }
+
+    private function connectPdo(string $dbFile): PDO
+    {
+        $pdo = new PDO('sqlite:' . $dbFile, null, null, [
             PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         ]);
-
         // Enable Write-Ahead Logging for high concurrency and performance
-        $this->pdo->exec('PRAGMA journal_mode = WAL');
-        $this->pdo->exec('PRAGMA synchronous = NORMAL');
-        $this->pdo->exec('PRAGMA busy_timeout = 5000');
-        $this->pdo->exec('PRAGMA foreign_keys = ON');
-
-        $this->initSchema();
+        $pdo->exec('PRAGMA journal_mode = WAL');
+        $pdo->exec('PRAGMA synchronous = NORMAL');
+        $pdo->exec('PRAGMA busy_timeout = 5000');
+        $pdo->exec('PRAGMA foreign_keys = ON');
+        return $pdo;
     }
 
     /**
