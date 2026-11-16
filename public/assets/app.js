@@ -162,9 +162,9 @@
     state.options[module]=names;state.optionItems[module]=items;return names;
   }
   function pillClass(value){
-    const success=['active','confirmed','delivered','done','resolved','published','1'];
-    const danger=['cancelled','closed','returned','urgent','0'];
-    const info=['shipped','progress','review'];
+    const success=['active','confirmed','delivered','called','done','resolved','published','1'];
+    const danger=['cancelled','closed','returned','unreachable','urgent','0'];
+    const info=['shipped','progress','callback','review'];
     return success.includes(String(value))?'green':danger.includes(String(value))?'red':info.includes(String(value))?'blue':'yellow';
   }
   function humanValue(column,value,field,row=null,module=null,canWrite=false){
@@ -177,7 +177,7 @@
     if(column==='created_at'||column==='updated_at')return esc(dateDisplay(value));
     if(module==='tasks' && column==='due_date'){
       const dStr=dateDisplay(value);
-      if(row && row.status!=='done' && /^\d{4}-\d\d-\d\d$/.test(dStr)){
+      if(row && !['done','unreachable'].includes(row.status) && /^\d{4}-\d\d-\d\d$/.test(dStr)){
         const today=fmtIsoDate(new Date());
         if(dStr<today){
           const diff=Math.max(1,Math.round((new Date(today)-new Date(dStr))/86400000));
@@ -218,7 +218,10 @@
   }
   function quickActionBtn(m,row,canWrite){
     if(!canWrite)return '';
-    if(m==='tasks' && row.status!=='done')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="done" title="ทำเครื่องหมายว่าเสร็จสิ้นทันที">✓ เสร็จสิ้น</button>`;
+    if(m==='tasks' && !['done','unreachable'].includes(row.status)){
+      const callBtn=['open','no_answer','callback'].includes(row.status)?`<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="called" title="เปลี่ยนเป็นโทรแล้วทันที">📞 โทรแล้ว</button>`:'';
+      return `${callBtn}<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="done" title="ทำเครื่องหมายว่าเสร็จสิ้นทันที">✓ เสร็จสิ้น</button>`;
+    }
     if(m==='donations' && row.status==='pending')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="confirmed" title="ยืนยันยอดบริจาคทันที">✓ ยืนยันยอด</button>`;
     if(m==='feedback' && row.status!=='resolved')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="resolved" title="เปลี่ยนเป็นแก้ไขแล้วทันที">✓ แก้ไขแล้ว</button>`;
     if(m==='announcements' && row.status==='draft')return `<button class="btn small quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="published" title="เผยแพร่ประกาศทันที">✦ เผยแพร่</button>`;

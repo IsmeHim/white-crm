@@ -113,7 +113,7 @@ final class Schema {
                 'assigned_to'=>['label'=>'เจ้าหน้าที่ผู้รับผิดชอบ','type'=>'relation','module'=>'users','placeholder'=>'คลิกเพื่อเลือกพนักงานผู้รับผิดชอบ…'],
                 'due_date'=>['label'=>'วันที่กำหนดติดตาม','type'=>'date'],
                 'priority'=>['label'=>'ระดับความสำคัญ','type'=>'select','options'=>['normal'=>'ทั่วไป','high'=>'สูง','urgent'=>'เร่งด่วน'],'placeholder'=>'— เลือกระดับความสำคัญ —'],
-                'status'=>['label'=>'สถานะงาน','type'=>'select','options'=>['open'=>'รอดำเนินการ','progress'=>'กำลังทำ','done'=>'เสร็จสิ้น'],'placeholder'=>'— เลือกสถานะงาน —'],
+                'status'=>['label'=>'สถานะงาน','type'=>'select','options'=>['open'=>'ยังไม่โทร','progress'=>'กำลังดำเนินการ','no_answer'=>'โทรไม่ติด / ไม่รับสาย','callback'=>'นัดโทรกลับ','called'=>'โทรแล้ว','done'=>'เสร็จสิ้น','unreachable'=>'ติดต่อไม่ได้ / ยกเลิก'],'placeholder'=>'— เลือกสถานะงาน —'],
                 'note'=>['label'=>'บันทึกผลการติดต่อ / รายละเอียด','type'=>'textarea','placeholder'=>'บันทึกรายละเอียดการพูดคุย เช่น ติดต่อแล้วรับสาย ยืนยันที่อยู่เรียบร้อย…'],
             ],'columns'=>['title','contact_id','contact_phone','assigned_to','due_date','status']],
             'feedback'=>['label'=>'ความคิดเห็น / ข้อเสนอแนะ','icon'=>'message-square','prefix'=>'fbk','fields'=>[

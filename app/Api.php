@@ -866,7 +866,7 @@ final class Api {
         $tasks=[];$openTasksCount=0;
         foreach($this->store->summaries('tasks') as $t){
             if(($t['contact_id']??'')!==$id)continue;
-            if(($t['status']??'')!=='done')$openTasksCount++;
+            if(!in_array($t['status']??'',['done','unreachable'],true))$openTasksCount++;
             $t['assigned_name']=$users[$t['assigned_to']??'']??($t['assigned_to']??'ยังไม่ระบุ');
             $tasks[]=$t;
         }
