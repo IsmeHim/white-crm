@@ -168,6 +168,10 @@
     return success.includes(String(value))?'green':danger.includes(String(value))?'red':info.includes(String(value))?'blue':'yellow';
   }
   function humanValue(column,value,field,row=null,module=null,canWrite=false){
+    if(module==='tasks' && column==='contact_phone'){
+      const phone=row?.contact_id?(state.optionItems?.contacts?.[row.contact_id]?.phone||''):'';
+      return phone?`<a href="tel:${esc(phone)}" style="font-weight:750;color:var(--accent-text);text-decoration:none" title="คลิกเพื่อโทร">${esc(phone)}</a>`:'<span class="cell-muted">—</span>';
+    }
     if(value===null||value===undefined||value==='')return '<span class="cell-muted">—</span>';
     if(['proof_file_id','cover_file_id'].includes(column))return `<a class="btn small" href="?api=file&id=${encodeURIComponent(value)}" target="_blank" rel="noopener">⇩ ดาวน์โหลดไฟล์</a>`;
     if(column==='created_at'||column==='updated_at')return esc(dateDisplay(value));
@@ -281,7 +285,7 @@
     $('#page-content').innerHTML=header('MANAGEMENT / '+m.toUpperCase(),schema.label,'จัดการข้อมูลพร้อมระบบค้นหาและบันทึกประวัติการเปลี่ยนแปลง',actions)+
       (showDateFilter?renderDateFilterBar():'')+
       donationSummaryStrip+
-      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div><div class="toolbar-right" style="display:flex;gap:8px">${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div></div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${rowActionButtons(m,row,canWrite)}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
+      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div><div class="toolbar-right" style="display:flex;gap:8px">${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div></div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต',contact_phone:'เบอร์โทรลูกค้า'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${rowActionButtons(m,row,canWrite)}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
     if(showDateFilter)wireDateFilterBar();
     $('[data-action="new"]')?.addEventListener('click',()=>openForm(m));
     $('[data-action="export"]')?.addEventListener('click',()=>{
@@ -356,18 +360,14 @@
     const boxHtml = `
       <div class="inline-contact-box" style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--accent);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);grid-column:1/-1">
         <div style="font-weight:800;font-size:12px;color:var(--accent-text);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span>＋ สร้างข้อมูลผู้บริจาคใหม่ทันที (บันทึกแล้วจะเลือกให้อัตโนมัติ)</span>
-          <button type="button" class="btn small ghost" id="inline-con-close" style="padding:0 6px;min-height:20px;font-size:16px" title="ปิด">×</button>
+          <span>＋ ข้อมูลผู้บริจาคใหม่ (จะถูกบันทึกพร้อมกันเมื่อกด "บันทึกข้อมูล" ด้านล่าง)</span>
+          <button type="button" class="btn small ghost" id="inline-con-close" style="padding:0 6px;min-height:20px;font-size:16px" title="ยกเลิกการสร้างผู้บริจาคใหม่">×</button>
         </div>
         <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:9px">
           <label class="form-field" style="margin:0"><span class="field-title">ชื่อ-นามสกุล / นามแฝง <span class="req-star">*</span></span><input id="quick-con-name" value="${esc(defaultName)}" placeholder="เช่น คุณสมชาย ใจดี" required autocomplete="off"></label>
           <label class="form-field" style="margin:0"><span class="field-title">เบอร์โทรศัพท์ <span class="req-star">*</span></span><input id="quick-con-phone" type="tel" value="${esc(defaultPhone)}" placeholder="เช่น 081-234-5678" required autocomplete="off"></label>
           <label class="form-field field-full" style="margin:0"><span class="field-title">ที่อยู่จัดส่งพัสดุ <span class="opt-tag">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</span></span><input id="quick-con-address" placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ" autocomplete="off"></label>
           <label class="form-field field-full" style="margin:0"><span class="field-title">จังหวัด</span><input id="quick-con-province" placeholder="เช่น กรุงเทพฯ" autocomplete="off"></label>
-        </div>
-        <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px">
-          <button type="button" class="btn small" id="inline-con-cancel">ยกเลิก</button>
-          <button type="button" class="btn small primary" id="inline-con-save" style="font-weight:800">✓ บันทึกและเลือกผู้บริจาคนี้</button>
         </div>
       </div>
     `;
@@ -379,7 +379,6 @@
     const phoneInput = box.querySelector('#quick-con-phone');
     const addrInput = box.querySelector('#quick-con-address');
     const provInput = box.querySelector('#quick-con-province');
-    const saveBtn = box.querySelector('#inline-con-save');
 
     addrInput?.addEventListener('input', () => {
       const p = detectThaiProvince(addrInput.value);
@@ -388,54 +387,6 @@
 
     const closeBox = () => { box.remove(); input.focus(); };
     box.querySelector('#inline-con-close')?.addEventListener('click', closeBox);
-    box.querySelector('#inline-con-cancel')?.addEventListener('click', closeBox);
-
-    saveBtn?.addEventListener('click', async () => {
-      const name = nameInput.value.trim();
-      const phone = phoneInput.value.trim();
-      const address = addrInput.value.trim();
-      const province = provInput.value.trim();
-
-      if(!name){
-        toast('กรุณาระบุชื่อผู้บริจาค', true);
-        nameInput.focus();
-        return;
-      }
-      if(!phone || phone.replace(/\D+/g,'').length < 9){
-        toast('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก', true);
-        phoneInput.focus();
-        return;
-      }
-
-      saveBtn.disabled = true;
-      try {
-        const payload = {
-          name,
-          phone,
-          address,
-          province: province || detectThaiProvince(address) || '',
-          type: 'donor'
-        };
-        const res = await api('record', {module:'contacts'}, 'POST', payload);
-        const newRec = res.record;
-        state.options.contacts = state.options.contacts || {};
-        state.options.contacts[newRec.id] = newRec.name;
-
-        target.value = newRec.id;
-        input.value = newRec.name + (newRec.phone ? ' (' + newRec.phone + ')' : '');
-        const clearBtn = picker.querySelector('.relation-clear');
-        clearBtn?.classList.remove('hidden');
-
-        box.remove();
-        toast(`สร้างผู้บริจาค "${newRec.name}" เรียบร้อยและเลือกให้อัตโนมัติ`);
-
-        const nextField = fieldWrap.closest('form')?.querySelector('#f_amount_satang, #f_campaign_id');
-        if(nextField) nextField.focus();
-      } catch(err) {
-        toast(err.message, true);
-        saveBtn.disabled = false;
-      }
-    });
 
     setTimeout(() => {
       if(!defaultName) nameInput.focus();
@@ -481,7 +432,7 @@
           if(isContacts && roleAllows('contacts',true)){
             createBtnHtml=`<div style="padding:6px;border-top:1px dashed var(--line);background:rgba(162,187,59,.07)"><button type="button" class="btn small primary relation-inline-create-btn" style="width:100%;font-size:11.5px;font-weight:800;gap:5px;justify-content:center">＋ สร้างผู้บริจาคใหม่ทันที${q?` "${esc(q)}"`:''}</button></div>`;
           }
-          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
+          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-hqty="${esc(o.hadeeya_qty||1)}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
           results.classList.remove('hidden');
 
           results.querySelector('.relation-inline-create-btn')?.addEventListener('click',e=>{
@@ -492,13 +443,44 @@
 
           results.querySelectorAll('[data-id]').forEach(btn=>btn.addEventListener('click',async()=>{
             target.value=btn.dataset.id;input.value=btn.dataset.name;results.classList.add('hidden');syncClear();
-            if(input.dataset.rel==='donations' && btn.dataset.shipnote){
-              const noteEl=$('#f_note',form);
-              if(noteEl && !noteEl.value.trim()){
-                noteEl.value=btn.dataset.shipnote;
+            if(input.dataset.rel==='donations'){
+              if(btn.dataset.shipnote){
+                const noteEl=$('#f_note',form);
+                if(noteEl && !noteEl.value.trim()){
+                  noteEl.value=btn.dataset.shipnote;
+                }
+              }
+              const hadInput=$('#f_hadeeya_id',form);
+              if(btn.dataset.hadeeya && hadInput){
+                hadInput.value=btn.dataset.hadeeya;
+                await optionNames('hadeeya').catch(()=>({}));
+                const hadName=state.options.hadeeya?.[btn.dataset.hadeeya]||btn.dataset.hadeeya;
+                const hadSearch=hadInput.parentElement?.querySelector('.relation-search');
+                if(hadSearch)hadSearch.value=hadName;
+                hadInput.parentElement?.querySelector('.relation-clear')?.classList.remove('hidden');
+                const qtyEl=$('#f_quantity',form);
+                if(qtyEl && (!qtyEl.value || Number(qtyEl.value)<=1)){
+                  qtyEl.value=btn.dataset.hqty||'1';
+                }
+                const lotInput=$('#f_lot_id',form);
+                if(lotInput){
+                  await optionNames('stock_lots').catch(()=>({}));
+                  const fifoLot=Object.values(state.optionItems.stock_lots||{}).find(l=>l.hadeeya_id===btn.dataset.hadeeya && Number(l.quantity||0)>0);
+                  if(fifoLot){
+                    lotInput.value=fifoLot.id;
+                    const lotSearch=lotInput.parentElement?.querySelector('.relation-search');
+                    if(lotSearch)lotSearch.value=fifoLot.name;
+                    lotInput.parentElement?.querySelector('.relation-clear')?.classList.remove('hidden');
+                  }
+                }
+                toast('ดึงข้อมูลฮาดียะห์, ล็อตสินค้า และที่อยู่จัดส่งจากรายการบริจาคให้อัตโนมัติ');
               }
             }
             if(input.dataset.rel==='hadeeya'){
+              const stEl=$('#f_hadeeya_status',form);
+              if(stEl && (!stEl.value || stEl.value==='none'))stEl.value='receive';
+              const hQtyEl=$('#f_hadeeya_qty',form);
+              if(hQtyEl && (!hQtyEl.value || Number(hQtyEl.value)<=0))hQtyEl.value='1';
               const lotInput=$('#f_lot_id',form);
               if(lotInput && !lotInput.value){
                 await optionNames('stock_lots').catch(()=>({}));
@@ -543,16 +525,27 @@
         if(module==='categories')record.active??='1';
         if(module==='campaigns'){record.start_date??=today;record.status??='active';}
         if(module==='receivers'){record.kind??='callcenter';record.active??='1';}
-        if(module==='donations'){record.donated_at??=today;record.status??='pending';record.channel??='bank';record.distribution_period??='once';}
+        if(module==='donations'){record.donated_at??=today;record.status??='pending';record.channel??='bank';record.distribution_period??='once';record.hadeeya_status??='none';}
         if(module==='hadeeya'){record.unit??='ชิ้น';record.active??='1';}
         if(module==='stock_lots')record.quantity??=1;
         if(module==='delivery_companies')record.active??='1';
         if(module==='shipments'){
           record.quantity??=1;record.status??='preparing';
-          if(record.donation_id && !record.note){
+          if(record.donation_id){
             await optionNames('donations').catch(()=>({}));
             const donOpt=state.optionItems.donations?.[record.donation_id];
-            if(donOpt?.shipping_note)record.note=donOpt.shipping_note;
+            if(donOpt){
+              if(!record.note && donOpt.shipping_note)record.note=donOpt.shipping_note;
+              if(!record.hadeeya_id && donOpt.hadeeya_id){
+                record.hadeeya_id=donOpt.hadeeya_id;
+                record.quantity=donOpt.hadeeya_qty||record.quantity||1;
+              }
+            }
+            if(record.hadeeya_id && !record.lot_id){
+              await optionNames('stock_lots').catch(()=>({}));
+              const fifoLot=Object.values(state.optionItems.stock_lots||{}).find(l=>l.hadeeya_id===record.hadeeya_id && Number(l.quantity||0)>0);
+              if(fifoLot)record.lot_id=fifoLot.id;
+            }
           }
         }
         if(module==='tasks'){record.assigned_to??=state.user?.id||'';record.due_date??=today;record.priority??='normal';record.status??='open';}
@@ -612,13 +605,51 @@
           }
         });
       }
-      formEl.onsubmit=async e=>{e.preventDefault();const data=formData(e.target);if(id)data.version=record.version;
+      formEl.onsubmit=async e=>{
+        e.preventDefault();
+        const data=formData(e.target);
+        if(id)data.version=record.version;
+        const submitBtn=formEl.querySelector('button[type="submit"]');
         try{
+          const inlineConBox=formEl.querySelector('.inline-contact-box');
+          if(inlineConBox && !data.contact_id){
+            const cName=inlineConBox.querySelector('#quick-con-name')?.value.trim()||'';
+            const cPhone=inlineConBox.querySelector('#quick-con-phone')?.value.trim()||'';
+            const cAddr=inlineConBox.querySelector('#quick-con-address')?.value.trim()||'';
+            const cProv=inlineConBox.querySelector('#quick-con-province')?.value.trim()||'';
+            if(!cName){toast('กรุณาระบุชื่อผู้บริจาค',true);inlineConBox.querySelector('#quick-con-name')?.focus();return;}
+            if(!cPhone||cPhone.replace(/\D+/g,'').length<9){toast('กรุณาระบุเบอร์โทรศัพท์อย่างน้อย 9-10 หลัก',true);inlineConBox.querySelector('#quick-con-phone')?.focus();return;}
+            if(submitBtn)submitBtn.disabled=true;
+            const conRes=await api('module',{module:'contacts'},'POST',{
+              name:cName,
+              phone:cPhone,
+              address:cAddr,
+              province:cProv||detectThaiProvince(cAddr)||'',
+              type:'donor'
+            });
+            const newCon=conRes.record;
+            state.options.contacts=state.options.contacts||{};
+            state.options.contacts[newCon.id]=newCon.name;
+            state.optionItems.contacts=state.optionItems.contacts||{};
+            state.optionItems.contacts[newCon.id]=newCon;
+            data.contact_id=newCon.id;
+            const conTarget=formEl.querySelector('#f_contact_id');
+            if(conTarget)conTarget.value=newCon.id;
+            const conSearch=conTarget?.closest('.relation-picker')?.querySelector('.relation-search');
+            if(conSearch)conSearch.value=newCon.name+(newCon.phone?' ('+newCon.phone+')':'');
+            inlineConBox.remove();
+          }
+          if(submitBtn)submitBtn.disabled=true;
           await api(id?'record':'module',id?{module,id}:{module},id?'PUT':'POST',data);
           delete state.options[module];delete state.optionItems[module];
           if(module==='shipments'){delete state.options.stock_lots;delete state.optionItems.stock_lots;}
-          closeModal();toast('บันทึกข้อมูลเรียบร้อย');render();
-        }catch(error){toast(error.message,true);}};
+          if(module==='donations'){delete state.options.tasks;delete state.optionItems.tasks;}
+          closeModal();toast(module==='donations'&&!id?'บันทึกข้อมูลและส่งต่อ Call Center อัตโนมัติเรียบร้อย':'บันทึกข้อมูลเรียบร้อย');render();
+        }catch(error){
+          if(submitBtn)submitBtn.disabled=false;
+          toast(error.message,true);
+        }
+      };
       $('#delete-record')?.addEventListener('click',async()=>{if(!confirm('ยืนยันการลบรายการนี้? ระบบจะเก็บประวัติเพื่อการตรวจสอบ'))return;
         try{await api('record',{module,id},'DELETE',{version:record.version});closeModal();toast('ลบข้อมูลแล้ว');render();}catch(e){toast(e.message,true);}});
     }catch(e){toast(e.message,true);}
@@ -1212,7 +1243,7 @@
         <span style="display:inline-flex;align-items:center;justify-content:center;flex-shrink:0">${iconPauseCircle}</span>
         <div>
           <div style="font-weight:800;color:var(--text)">ระบบอยู่ในโหมดพัฒนา: ปิดการบันทึกประวัติการทำงานชั่วคราว</div>
-          <div class="muted mini" style="margin-top:2px">การกระทำต่างๆ ในระบบจะไม่ถูกบันทึกลงฐานข้อมูล เพื่อประหยัดพื้นที่จัดเก็บ SQLite</div>
+          <div class="muted mini" style="margin-top:2px">คุณยังสามารถเพิ่ม แก้ไข และบันทึกข้อมูลในฟอร์มต่างๆ ได้ตามปกติ — ระบบแค่ไม่บันทึก Log ประวัติการทำงานย้อนหลังเพื่อประหยัดพื้นที่ SQLite</div>
         </div>
       </div>`;
     }

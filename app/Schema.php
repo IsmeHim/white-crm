@@ -60,6 +60,9 @@ final class Schema {
                     'day'=>'กลางวัน',
                     'night'=>'กลางคืน'
                 ],'placeholder'=>'— เลือกรูปแบบการบริจาค —'],
+                'hadeeya_status'=>['label'=>'ความประสงค์รับฮาดียะห์','type'=>'select','options'=>['none'=>'ไม่รับของฮาดียะห์','receive'=>'ขอรับของฮาดียะห์','pending'=>'รอแจ้งภายหลัง (ให้ Call Center โทรถาม)'],'placeholder'=>'— เลือกความต้องการรับฮาดียะห์ (ค่าเริ่มต้น: ไม่รับ) —'],
+                'hadeeya_id'=>['label'=>'ของฮาดียะห์ที่ขอรับ','type'=>'relation','module'=>'hadeeya','placeholder'=>'คลิกเพื่อเลือกของฮาดียะห์ (ถ้ามี)…'],
+                'hadeeya_qty'=>['label'=>'จำนวนฮาดียะห์ (ชิ้น)','type'=>'integer','placeholder'=>'ระบุจำนวนชิ้น (เช่น 1)'],
                 'note'=>['label'=>'หมายเหตุการบริจาค','type'=>'textarea','placeholder'=>'เช่น โอนเข้าบัญชีธนาคารกสิกรไทย เวลา 14:30 น. / ขอรับฮาดียะห์…'],
                 'legacy_id'=>['label'=>'รหัสระบบเก่า','type'=>'text','placeholder'=>'รหัสอ้างอิงจากระบบเดิม (เว้นว่างได้)'],
             ],'columns'=>['barcode','contact_id','campaign_id','amount_satang','status','donated_at']],
@@ -112,7 +115,7 @@ final class Schema {
                 'priority'=>['label'=>'ระดับความสำคัญ','type'=>'select','options'=>['normal'=>'ทั่วไป','high'=>'สูง','urgent'=>'เร่งด่วน'],'placeholder'=>'— เลือกระดับความสำคัญ —'],
                 'status'=>['label'=>'สถานะงาน','type'=>'select','options'=>['open'=>'รอดำเนินการ','progress'=>'กำลังทำ','done'=>'เสร็จสิ้น'],'placeholder'=>'— เลือกสถานะงาน —'],
                 'note'=>['label'=>'บันทึกผลการติดต่อ / รายละเอียด','type'=>'textarea','placeholder'=>'บันทึกรายละเอียดการพูดคุย เช่น ติดต่อแล้วรับสาย ยืนยันที่อยู่เรียบร้อย…'],
-            ],'columns'=>['title','contact_id','assigned_to','due_date','status']],
+            ],'columns'=>['title','contact_id','contact_phone','assigned_to','due_date','status']],
             'feedback'=>['label'=>'ความคิดเห็น / ข้อเสนอแนะ','icon'=>'message-square','prefix'=>'fbk','fields'=>[
                 'contact_id'=>['label'=>'ผู้ติดต่อ / ผู้บริจาค','type'=>'relation','module'=>'contacts','placeholder'=>'คลิกเพื่อเลือกผู้ติดต่อ (หรือเว้นว่างหากไม่ประสงค์ออกนาม)…'],
                 'topic'=>['label'=>'หัวข้อเรื่อง','type'=>'text','required'=>true,'placeholder'=>'เช่น ชื่นชมรายการใหม่ / สอบถามการจัดส่งฮาดียะห์ล่าช้า'],
