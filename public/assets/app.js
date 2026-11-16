@@ -285,10 +285,23 @@
         <span>ยอดรวมทั้งหมด (ไม่รวมยกเลิก): <strong>${money(r.sum_total_satang||0)}</strong></span>
       </div>
     </div>`:'';
+    const shipmentBatchBar=(m==='shipments')?`<div class="shipment-batch-bar">
+      <div class="batch-bar-left">
+        <span class="batch-title">📦 <strong>จัดการพัสดุเป็นชุด:</strong></span>
+        <span class="pill" id="batch-select-label">เลือกแล้ว 0 รายการ</span>
+        <button type="button" class="btn small" id="btn-select-preparing" title="เลือกเฉพาะรายการค้างส่งในหน้านี้">⚡ เลือกรายการค้างส่งในหน้านี้</button>
+        <button type="button" class="btn small ghost" id="btn-clear-selection">ล้างที่เลือก</button>
+      </div>
+      <div class="batch-bar-right">
+        <button type="button" class="btn primary btn-batch-print" id="btn-batch-print" disabled title="เลือกรายการจากตารางแล้วสั่งพิมพ์พร้อมกัน">🖨 พิมพ์ใบปะหน้าชุดที่เลือก (<span id="batch-count-num">0</span>)</button>
+        <button type="button" class="btn" id="btn-print-all-preparing" title="ดึงรายการที่สถานะ 'เตรียมจัดส่ง' ทั้งหมดในระบบมาพิมพ์ทันที">🏷 พิมพ์รายการค้างส่งทั้งหมดในระบบ</button>
+      </div>
+    </div>`:'';
     $('#page-content').innerHTML=header('MANAGEMENT / '+m.toUpperCase(),schema.label,'จัดการข้อมูลพร้อมระบบค้นหาและบันทึกประวัติการเปลี่ยนแปลง',actions)+
       (showDateFilter?renderDateFilterBar():'')+
       donationSummaryStrip+
-      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div><div class="toolbar-right" style="display:flex;gap:8px">${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div></div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต',contact_phone:'เบอร์โทรลูกค้า'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${rowActionButtons(m,row,canWrite)}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
+      shipmentBatchBar+
+      `<div class="toolbar"><div class="toolbar-left"><input id="search-records" class="search-input" type="search" value="${esc(state.q)}" placeholder="ค้นหาชื่อ รหัส หรือรายละเอียด…" aria-label="ค้นหา">${filter}</div><div class="toolbar-right" style="display:flex;gap:8px">${roleAllows('reports')?btn('⇩ ส่งออก CSV','export'):''}</div></div><section class="panel table-panel"><div class="table-header"><div><h3>รายการทั้งหมด</h3><p>พบ ${num(r.total)} รายการ</p></div><span class="pill">หน้า ${num(r.page)} / ${num(r.pages)}</span></div><div class="table-wrap"><table><thead><tr>${m==='shipments'?`<th class="cell-check"><input type="checkbox" id="chk-all-shipments" class="chk-header" title="เลือกทั้งหมดในหน้านี้" aria-label="เลือกทั้งหมด"></th>`:''}${columns.map(col=>`<th>${esc(schema.fields[col]?.label||({created_at:'วันที่สร้าง',updated_at:'อัปเดต',contact_phone:'เบอร์โทรลูกค้า'}[col]||col))}</th>`).join('')}<th>จัดการ</th></tr></thead><tbody>${r.items.length?r.items.map(row=>`<tr>${m==='shipments'?`<td class="cell-check"><input type="checkbox" class="chk-ship-row" data-id="${esc(row.id)}" data-status="${esc(row.status||'')}" aria-label="เลือกรายการ ${esc(row.id)}"></td>`:''}${columns.map((col,i)=>`<td class="${i===0?'cell-primary':''}">${humanValue(col,row[col],schema.fields[col],row,m,canWrite)}</td>`).join('')}<td><div class="table-actions">${rowActionButtons(m,row,canWrite)}</div></td></tr>`).join(''):`<tr><td colspan="${columns.length+1+(m==='shipments'?1:0)}"><div class="empty"><div class="empty-icon">☷</div><h3>ไม่พบข้อมูล</h3><p>ลองค้นหาด้วยคำอื่น ปรับช่วงวันที่ หรือเพิ่มรายการใหม่</p></div></td></tr>`}</tbody></table></div><div class="table-footer"><span>${r.total?`แสดง ${(r.page-1)*20+1}–${Math.min(r.total,r.page*20)} จาก ${num(r.total)}`:'ไม่มีรายการ'}</span><div class="pagination"><button id="prev-page" class="btn small" ${r.page<=1?'disabled':''}>ก่อนหน้า</button><button id="next-page" class="btn small" ${r.page>=r.pages?'disabled':''}>ถัดไป</button></div></div></section>`;
     if(showDateFilter)wireDateFilterBar();
     $('[data-action="new"]')?.addEventListener('click',()=>openForm(m));
     $('[data-action="export"]')?.addEventListener('click',()=>{
@@ -314,6 +327,58 @@
     document.querySelectorAll('[data-qact-id]').forEach(btn=>btn.addEventListener('click',()=>{
       updateQuickStatus(m,btn.dataset.qactId,'status',btn.dataset.qactVal,btn);
     }));
+
+    if(m==='shipments'){
+      const chkAll=$('#chk-all-shipments');
+      const getRowChecks=()=>document.querySelectorAll('.chk-ship-row');
+      const batchPrintBtn=$('#btn-batch-print');
+      const batchCountNum=$('#batch-count-num');
+      const batchLabel=$('#batch-select-label');
+
+      const updateBatchUI=()=>{
+        const checkedBoxes=Array.from(getRowChecks()).filter(c=>c.checked);
+        const count=checkedBoxes.length;
+        if(batchCountNum)batchCountNum.textContent=count;
+        if(batchLabel)batchLabel.textContent=`เลือกแล้ว ${count} รายการ`;
+        if(batchPrintBtn)batchPrintBtn.disabled=(count===0);
+        if(chkAll){
+          const allBoxes=Array.from(getRowChecks());
+          chkAll.checked=(allBoxes.length>0 && count===allBoxes.length);
+          chkAll.indeterminate=(count>0 && count<allBoxes.length);
+        }
+      };
+
+      chkAll?.addEventListener('change',e=>{
+        getRowChecks().forEach(c=>{c.checked=e.target.checked;});
+        updateBatchUI();
+      });
+
+      document.querySelectorAll('.chk-ship-row').forEach(c=>{
+        c.addEventListener('change',updateBatchUI);
+      });
+
+      $('#btn-select-preparing')?.addEventListener('click',()=>{
+        getRowChecks().forEach(c=>{
+          c.checked=(c.dataset.status==='preparing');
+        });
+        updateBatchUI();
+      });
+
+      $('#btn-clear-selection')?.addEventListener('click',()=>{
+        getRowChecks().forEach(c=>{c.checked=false;});
+        updateBatchUI();
+      });
+
+      $('#btn-batch-print')?.addEventListener('click',()=>{
+        const ids=Array.from(getRowChecks()).filter(c=>c.checked).map(c=>c.dataset.id);
+        if(!ids.length){toast('กรุณาเลือกรายการที่ต้องการพิมพ์อย่างน้อย 1 รายการ',true);return;}
+        openShippingLabels({ids});
+      });
+
+      $('#btn-print-all-preparing')?.addEventListener('click',()=>{
+        openShippingLabels({preparing:1});
+      });
+    }
   }
   async function fieldHTML(k,field,value='',editing=false,forModule='',recordId=''){
     const type=field.type;let input='';const id='f_'+k;const required=field.required?'required':'';
