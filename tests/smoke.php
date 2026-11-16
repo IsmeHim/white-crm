@@ -37,6 +37,11 @@ $autoHad=Schema::data('hadeeya',['name'=>'หนังสืออัลกุ�
 assert(str_starts_with($autoHad['sku'],'HDY-'));
 assert($autoHad['unit']==='ชิ้น');
 assert($autoHad['active']==='1');
+$barcodeSvg=\CRM\Barcode::code128Svg('TH123456789TH');
+assert(str_contains($barcodeSvg,'<svg') && str_contains($barcodeSvg,'TH123456789TH'));
+$shp=['id'=>crm_id('shp'),'version'=>1,'created_at'=>$now,'updated_at'=>$now,'deleted_at'=>null,'donation_id'=>$don1['id'],'hadeeya_id'=>$autoHad['name'],'lot_id'=>'','quantity'=>1,'status'=>'preparing','tracking_no'=>'EF999888777TH'];
+$store->transact([['collection'=>'shipments','id'=>$shp['id'],'record'=>$shp,'summary'=>Schema::summary('shipments',$shp)]]);
+assert($store->read('shipments',$shp['id'])['tracking_no']==='EF999888777TH');
 function rmTree(string $path):void{if(!is_dir($path))return;foreach(new FilesystemIterator($path,FilesystemIterator::SKIP_DOTS) as $f){if($f->isDir())rmTree($f->getPathname());else @unlink($f->getPathname());}@rmdir($path);}
 unset($store);
 rmTree($dir);
