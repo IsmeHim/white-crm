@@ -55,6 +55,34 @@
     if(d.length===9&&d.startsWith('0'))return `${d.slice(0,2)}-${d.slice(2,5)}-${d.slice(5)}`;
     return raw;
   }
+  function formatThaiPhoneAsYouType(raw){
+    const d=String(raw||'').replace(/\D+/g,'').slice(0,10);
+    if(!d)return '';
+    if(/^0[23457]/.test(d)&&d.length<=9){
+      if(d.length<=2)return d;
+      if(d.length<=5)return `${d.slice(0,2)}-${d.slice(2)}`;
+      return `${d.slice(0,2)}-${d.slice(2,5)}-${d.slice(5,9)}`;
+    }
+    if(d.length<=3)return d;
+    if(d.length<=6)return `${d.slice(0,3)}-${d.slice(3)}`;
+    return `${d.slice(0,3)}-${d.slice(3,6)}-${d.slice(6,10)}`;
+  }
+  function applyPhoneMask(el){
+    if(!el)return;
+    const raw=el.value;
+    const pos=el.selectionStart??raw.length;
+    const digitsBefore=raw.slice(0,pos).replace(/\D+/g,'').length;
+    const formatted=formatThaiPhoneAsYouType(raw);
+    if(formatted!==raw){
+      el.value=formatted;
+      let newPos=0,seen=0;
+      while(newPos<formatted.length&&seen<digitsBefore){
+        if(/\d/.test(formatted[newPos]))seen++;
+        newPos++;
+      }
+      if(typeof el.setSelectionRange==='function')el.setSelectionRange(newPos,newPos);
+    }
+  }
   const fmtIsoDate=d=>{const y=d.getFullYear(),m=String(d.getMonth()+1).padStart(2,'0'),day=String(d.getDate()).padStart(2,'0');return `${y}-${m}-${day}`;};
   function computeDatePreset(preset){
     const now=new Date();const today=fmtIsoDate(now);
@@ -416,49 +444,63 @@
   }
   function showInlineContactCreator(picker, target, input, initialText=''){
     const fieldWrap = picker.closest('.form-field') || picker.parentElement;
-    let existingBox = fieldWrap.querySelector('.inline-contact-box');
+    const gridWrap = fieldWrap.parentElement || fieldWrap;
+    let existingBox = gridWrap.querySelector('.inline-contact-box');
     if(existingBox){
       existingBox.remove();
       return;
     }
-    const isDigits = /^[\d\s+-]{6,}$/.test(initialText.trim());
+    const isDigits = /^[\d\s+-]+$/.test(initialText.trim());
     const defaultPhone = isDigits ? initialText.trim() : '';
     const defaultName = isDigits ? '' : initialText.trim();
 
     const boxHtml = `
-      <div class="inline-contact-box" style="margin-top:10px;padding:12px 14px;background:var(--bg);border:1.5px solid var(--accent);border-radius:12px;box-shadow:0 4px 16px rgba(0,0,0,.08);grid-column:1/-1">
-        <div style="font-weight:800;font-size:12px;color:var(--accent-text);display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-          <span>＋ ข้อมูลผู้บริจาคใหม่ (จะถูกบันทึกพร้อมกันเมื่อกด "บันทึกข้อมูล" ด้านล่าง)</span>
-          <button type="button" class="btn small ghost" id="inline-con-close" style="padding:0 6px;min-height:20px;font-size:16px" title="ยกเลิกการสร้างผู้บริจาคใหม่">×</button>
+      <div class="inline-contact-box">
+        <div class="inline-contact-head">
+          <div class="inline-contact-title-wrap">
+            <span class="inline-contact-badge">＋ ผู้บริจาคใหม่</span>
+            <span class="inline-contact-sub">บันทึกพร้อมรายการบริจาคอัตโนมัติ</span>
+          </div>
+          <button type="button" class="btn small ghost inline-contact-close" id="inline-con-close" title="ยกเลิกและกลับไปค้นหาผู้บริจาคเดิม">← กลับไปค้นหาเดิม</button>
         </div>
-        <div class="form-grid" style="grid-template-columns:1fr 1fr;gap:9px">
+        <div class="inline-contact-grid">
+          <label class="form-field" style="margin:0"><span class="field-title">เบอร์โทรศัพท์ <span class="req-star">*</span></span><input id="quick-con-phone" type="tel" value="${esc(defaultPhone)}" placeholder="เช่น 081-234-5678 (กรอกเบอร์ก่อน)" required autocomplete="off"></label>
           <label class="form-field" style="margin:0"><span class="field-title">ชื่อ-นามสกุล / นามแฝง <span class="req-star">*</span></span><input id="quick-con-name" value="${esc(defaultName)}" placeholder="เช่น คุณสมชาย ใจดี" required autocomplete="off"></label>
-          <label class="form-field" style="margin:0"><span class="field-title">เบอร์โทรศัพท์ <span class="req-star">*</span></span><input id="quick-con-phone" type="tel" value="${esc(defaultPhone)}" placeholder="เช่น 081-234-5678" required autocomplete="off"></label>
-          <label class="form-field field-full" style="margin:0"><span class="field-title">ที่อยู่จัดส่งพัสดุ <span class="opt-tag">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</span></span><input id="quick-con-address" placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ" autocomplete="off"></label>
-          <label class="form-field field-full" style="margin:0"><span class="field-title">จังหวัด</span><input id="quick-con-province" placeholder="เช่น กรุงเทพฯ" autocomplete="off"></label>
+          <label class="form-field inline-contact-addr" style="margin:0"><span class="field-title">ที่อยู่จัดส่งพัสดุ <span class="opt-tag">(เว้นว่างได้ เพื่อให้ Call Center โทรสอบถาม)</span></span><input id="quick-con-address" placeholder="บ้านเลขที่ ถนน แขวง/ตำบล เขต/อำเภอ" autocomplete="off"></label>
+          <label class="form-field" style="margin:0"><span class="field-title">จังหวัด</span><input id="quick-con-province" placeholder="เช่น กรุงเทพฯ" autocomplete="off"></label>
         </div>
       </div>
     `;
 
-    fieldWrap.insertAdjacentHTML('beforeend', boxHtml);
-    const box = fieldWrap.querySelector('.inline-contact-box');
+    fieldWrap.insertAdjacentHTML('afterend', boxHtml);
+    fieldWrap.classList.add('hidden');
+    const box = gridWrap.querySelector('.inline-contact-box');
 
     const nameInput = box.querySelector('#quick-con-name');
     const phoneInput = box.querySelector('#quick-con-phone');
     const addrInput = box.querySelector('#quick-con-address');
     const provInput = box.querySelector('#quick-con-province');
 
+    if(phoneInput){
+      if(phoneInput.value)phoneInput.value=formatThaiPhoneAsYouType(phoneInput.value);
+      phoneInput.addEventListener('input',()=>applyPhoneMask(phoneInput));
+      phoneInput.addEventListener('blur',()=>{phoneInput.value=formatThaiPhone(phoneInput.value);});
+    }
+
     addrInput?.addEventListener('input', () => {
       const p = detectThaiProvince(addrInput.value);
       if(p && provInput && !provInput.value.trim()) provInput.value = p;
     });
 
-    const closeBox = () => { box.remove(); input.focus(); };
+    const closeBox = () => { box.remove(); fieldWrap.classList.remove('hidden'); input.focus(); };
     box.querySelector('#inline-con-close')?.addEventListener('click', closeBox);
 
     setTimeout(() => {
-      if(!defaultName) nameInput.focus();
-      else if(!defaultPhone) phoneInput.focus();
+      if(!defaultPhone || defaultPhone.replace(/\D+/g,'').length < 9){
+        phoneInput.focus();
+        const len = phoneInput.value.length;
+        if(typeof phoneInput.setSelectionRange === 'function') phoneInput.setSelectionRange(len, len);
+      } else if(!defaultName) nameInput.focus();
       else addrInput.focus();
     }, 50);
   }
@@ -498,9 +540,12 @@
           const isContacts=(input.dataset.rel==='contacts');
           let createBtnHtml='';
           if(isContacts && roleAllows('contacts',true)){
-            createBtnHtml=`<div style="padding:6px;border-top:1px dashed var(--line);background:rgba(162,187,59,.07)"><button type="button" class="btn small primary relation-inline-create-btn" style="width:100%;font-size:11.5px;font-weight:800;gap:5px;justify-content:center">＋ สร้างผู้บริจาคใหม่ทันที${q?` "${esc(q)}"`:''}</button></div>`;
+            createBtnHtml=`<div class="relation-inline-create-wrap"><button type="button" class="btn small primary relation-inline-create-btn">＋ สร้างผู้บริจาคใหม่ทันที${q?` "${esc(q)}"`:''}</button></div>`;
           }
-          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-hqty="${esc(o.hadeeya_qty||1)}" data-shipnote="${esc(o.shipping_note||'')}"><span>${esc(o.name)}</span><small>${esc(o.id.slice(0,11))}</small></button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
+          results.innerHTML=(r.items.length?r.items.map(o=>`<button type="button" class="relation-option" data-id="${esc(o.id)}" data-name="${esc(o.name)}" data-phone="${esc(o.phone||'')}" data-hadeeya="${esc(o.hadeeya_id||'')}" data-hqty="${esc(o.hadeeya_qty||1)}" data-shipnote="${esc(o.shipping_note||'')}">
+            <span class="relation-opt-main"><strong>${esc(o.name)}</strong>${o.phone?`<small class="relation-opt-phone">📞 ${esc(o.phone)}</small>`:''}</span>
+            <small class="relation-opt-id">${esc(o.id.slice(0,11))}</small>
+          </button>`).join(''):'<div class="relation-empty">ไม่พบข้อมูลที่ตรงกัน</div>')+createBtnHtml;
           results.classList.remove('hidden');
 
           results.querySelector('.relation-inline-create-btn')?.addEventListener('click',e=>{
@@ -510,7 +555,7 @@
           });
 
           results.querySelectorAll('[data-id]').forEach(btn=>btn.addEventListener('click',async()=>{
-            target.value=btn.dataset.id;input.value=btn.dataset.name;results.classList.add('hidden');syncClear();
+            target.value=btn.dataset.id;input.value=btn.dataset.phone?`${btn.dataset.name} (${btn.dataset.phone})`:btn.dataset.name;results.classList.add('hidden');syncClear();
             if(input.dataset.rel==='donations'){
               if(btn.dataset.shipnote){
                 const noteEl=$('#f_note',form);
@@ -577,6 +622,7 @@
       };
       input.addEventListener('focus',()=>{loadOptions(input.value.trim().length>=2?input.value.trim():'');});
       input.addEventListener('input',()=>{
+        if(input.dataset.rel==='contacts' && /^0[\d-]*$/.test(input.value.trim()))applyPhoneMask(input);
         target.value='';syncClear();clearTimeout(t);const q=input.value.trim();
         t=setTimeout(()=>loadOptions(q),220);
       });
@@ -646,8 +692,8 @@
         phoneEl?.addEventListener('blur',()=>{phoneEl.value=formatThaiPhone(phoneEl.value);});
         phoneEl?.addEventListener('input',()=>{
           clearTimeout(pTimer);
+          applyPhoneMask(phoneEl);
           const digits=phoneEl.value.replace(/\D+/g,'');
-          if(digits.length===10 && digits.startsWith('0'))phoneEl.value=formatThaiPhone(digits);
           if(digits.length<9){phoneWarn?.classList.add('hidden');return;}
           pTimer=setTimeout(async()=>{
             try{
@@ -706,6 +752,7 @@
             const conSearch=conTarget?.closest('.relation-picker')?.querySelector('.relation-search');
             if(conSearch)conSearch.value=newCon.name+(newCon.phone?' ('+newCon.phone+')':'');
             inlineConBox.remove();
+            conTarget?.closest('.form-field')?.classList.remove('hidden');
           }
           if(submitBtn)submitBtn.disabled=true;
           await api(id?'record':'module',id?{module,id}:{module},id?'PUT':'POST',data);

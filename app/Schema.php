@@ -6,8 +6,8 @@ final class Schema {
     public static function all(): array {
         return [
             'contacts'=>['label'=>'สมาชิก / ผู้บริจาค','icon'=>'users','prefix'=>'con','fields'=>[
+                'phone'=>['label'=>'เบอร์โทรศัพท์','type'=>'phone','placeholder'=>'เช่น 081-234-5678 (กรอกเบอร์ก่อนเพื่อเช็กข้อมูลซ้ำ)'],
                 'name'=>['label'=>'ชื่อ-นามสกุล','type'=>'text','required'=>true,'placeholder'=>'เช่น นายอับดุลเลาะห์ มีสุข หรือ บจก. ไวท์แชนแนล'],
-                'phone'=>['label'=>'เบอร์โทรศัพท์','type'=>'phone','placeholder'=>'เช่น 081-234-5678 หรือ 02-123-4567'],
                 'email'=>['label'=>'อีเมล','type'=>'email','placeholder'=>'เช่น donor@example.com (ถ้ามี)'],
                 'type'=>['label'=>'ประเภทสมาชิก','type'=>'select','options'=>['donor'=>'ผู้บริจาค','member'=>'สมาชิก','organization'=>'องค์กร'],'placeholder'=>'— เลือกประเภทสมาชิก —'],
                 'province'=>['label'=>'จังหวัด','type'=>'text','placeholder'=>'เช่น กรุงเทพมหานคร, ปัตตานี, ยะลา, เชียงใหม่'],
@@ -40,7 +40,7 @@ final class Schema {
                 'notes'=>['label'=>'หมายเหตุ','type'=>'textarea','placeholder'=>'เช่น รอบกะการทำงาน หรือรายละเอียดช่องทางรับแจ้งยอด…'],
             ],'columns'=>['name','kind','phone','active']],
             'donations'=>['label'=>'รายการบริจาค','icon'=>'heart-handshake','prefix'=>'don','fields'=>[
-                'contact_id'=>['label'=>'ผู้บริจาค / สมาชิก','type'=>'relation','module'=>'contacts','required'=>true,'placeholder'=>'คลิกเพื่อเลือก หรือพิมพ์ชื่อ / เบอร์โทรผู้บริจาค…'],
+                'contact_id'=>['label'=>'ผู้บริจาค / สมาชิก','type'=>'relation','module'=>'contacts','required'=>true,'placeholder'=>'พิมพ์เบอร์โทร เช่น 081-234-5678 (แนะนำ) หรือชื่อผู้บริจาค…'],
                 'campaign_id'=>['label'=>'โครงการที่ร่วมบริจาค','type'=>'relation','module'=>'campaigns','required'=>true,'placeholder'=>'คลิกเพื่อเลือก หรือพิมพ์ชื่อโครงการ…'],
                 'receiver_id'=>['label'=>'ผู้รับแจ้งยอด / ช่องทาง','type'=>'relation','module'=>'receivers','placeholder'=>'คลิกเพื่อเลือกผู้รับแจ้งยอด (ถ้ามี)…'],
                 'amount_satang'=>['label'=>'จำนวนเงินบริจาค (บาท)','type'=>'money','required'=>true,'placeholder'=>'ระบุยอดเงิน เช่น 500.00 หรือ 1500.00'],
