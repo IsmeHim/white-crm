@@ -135,6 +135,8 @@ final class Api {
                     $this->phoneLookup();break;
                 case 'shipping-labels':
                     $this->shippingLabels();break;
+                case 'import-tracking':
+                    $this->importTracking($method);break;
                 case 'db-info':
                     $this->dbInfo();break;
                 case 'backup-download':
@@ -1028,10 +1030,19 @@ final class Api {
 
             $donationBarcode = !empty($donation['barcode']) ? $donation['barcode'] : (!empty($shipment['donation_id']) ? substr((string)$shipment['donation_id'], 0, 12) : '');
 
+            $trackingUrl = '';
+            if (!empty($courier['tracking_url']) && $trackingNo !== '') {
+                $trackingUrl = str_replace('{tracking}', rawurlencode($trackingNo), (string)$courier['tracking_url']);
+            } elseif ($trackingNo !== '') {
+                $trackingUrl = 'https://www.google.com/search?q=' . rawurlencode($trackingNo);
+            }
+
             $labels[] = [
                 'shipment_id' => $shipId,
                 'status' => $shipment['status'] ?? 'preparing',
                 'tracking_no' => $trackingNo,
+                'tracking_url' => $trackingUrl,
+                'courier_tracking_url' => $trackingUrl,
                 'barcode_text' => $barcodeText,
                 'barcode_svg' => $barcodeSvg,
                 'donation_barcode' => $donationBarcode,
@@ -1059,6 +1070,150 @@ final class Api {
             'sender' => $sender,
             'count' => count($labels),
             'labels' => $labels,
+        ]);
+    }
+
+    private function importTracking(string $method): never {
+        if ($method !== 'POST') {
+            crm_json(['error' => 'Method not allowed'], 405);
+        }
+        $this->auth->require('shipments', 'write');
+        $body = crm_input();
+        $items = $body['items'] ?? [];
+        if (!is_array($items) || empty($items)) {
+            crm_json(['error' => 'กรุณาระบุข้อมูลรายการเลขพัสดุอย่างน้อย 1 รายการ'], 422);
+        }
+        $courierId = trim((string)($body['courier_id'] ?? ''));
+        $sentAt = trim((string)($body['sent_at'] ?? ''));
+        if ($sentAt === '' || !preg_match('/^\d{4}-\d\d-\d\d$/', $sentAt)) {
+            $sentAt = date('Y-m-d');
+        }
+
+        $shipments = [];
+        foreach ($this->store->summaries('shipments') as $s) {
+            $shipments[$s['id']] = $s;
+        }
+
+        $donations = [];
+        foreach ($this->store->summaries('donations') as $d) {
+            $donations[$d['id']] = $d;
+        }
+
+        $contacts = [];
+        foreach ($this->store->summaries('contacts') as $c) {
+            $contacts[$c['id']] = $c;
+        }
+
+        $now = crm_now();
+        $updated = [];
+        $failed = [];
+        $changes = [];
+
+        foreach ($items as $row) {
+            $trackingNo = trim((string)($row['tracking_no'] ?? ''));
+            $matchKey = trim((string)($row['match'] ?? ''));
+            if ($trackingNo === '' || $matchKey === '') {
+                continue;
+            }
+
+            $matchedShipId = null;
+            $cleanMatch = preg_replace('/[^\p{L}\p{N}]/u', '', mb_strtolower($matchKey, 'UTF-8'));
+            $digitsMatch = preg_replace('/\D/', '', $matchKey);
+
+            foreach ($shipments as $sId => $s) {
+                // 1. Match by shipment ID directly
+                if (strcasecmp($sId, $matchKey) === 0 || str_contains($matchKey, $sId)) {
+                    $matchedShipId = $sId;
+                    break;
+                }
+                $dId = (string)($s['donation_id'] ?? '');
+                $don = $donations[$dId] ?? null;
+                $donBarcode = (string)($don['barcode'] ?? '');
+                // 2. Match by donation ID or donation barcode
+                if ($dId !== '' && (
+                    strcasecmp($dId, $matchKey) === 0 ||
+                    str_contains($matchKey, $dId) ||
+                    ($donBarcode !== '' && (strcasecmp($donBarcode, $matchKey) === 0 || str_contains($matchKey, $donBarcode)))
+                )) {
+                    $matchedShipId = $sId;
+                    break;
+                }
+                // 3. Match by recipient phone or recipient name
+                if ($don && !empty($don['contact_id'])) {
+                    $c = $contacts[(string)$don['contact_id']] ?? null;
+                    if ($c) {
+                        $cPhone = preg_replace('/\D/', '', (string)($c['phone'] ?? ''));
+                        if ($digitsMatch !== '' && strlen($digitsMatch) >= 8 && $cPhone !== '' && (str_ends_with($cPhone, substr($digitsMatch, -8)) || str_contains($digitsMatch, substr($cPhone, -8)))) {
+                            $matchedShipId = $sId;
+                            break;
+                        }
+                        $cName = preg_replace('/[^\p{L}\p{N}]/u', '', mb_strtolower((string)($c['name'] ?? ''), 'UTF-8'));
+                        if ($cleanMatch !== '' && mb_strlen($cleanMatch, 'UTF-8') >= 3 && (str_contains($cName, $cleanMatch) || str_contains($cleanMatch, $cName))) {
+                            $matchedShipId = $sId;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!$matchedShipId) {
+                $failed[] = ['tracking_no' => $trackingNo, 'match' => $matchKey, 'reason' => 'ไม่พบข้อมูลที่ตรงกันในระบบ'];
+                continue;
+            }
+
+            $current = $this->store->read('shipments', $matchedShipId);
+            if (!$current || !empty($current['deleted_at'])) {
+                $failed[] = ['tracking_no' => $trackingNo, 'match' => $matchKey, 'reason' => 'ข้อมูลพัสดุถูกลบไปแล้ว'];
+                continue;
+            }
+
+            $current['tracking_no'] = $trackingNo;
+            $current['status'] = 'shipped';
+            $current['sent_at'] = $sentAt;
+            if ($courierId !== '') {
+                $current['delivery_company_id'] = $courierId;
+            }
+            $current['updated_at'] = $now;
+            $current['version'] = (int)($current['version'] ?? 1) + 1;
+
+            $changes[] = [
+                'collection' => 'shipments',
+                'id' => $matchedShipId,
+                'record' => $current,
+                'summary' => Schema::summary('shipments', $current),
+                'expected_version' => $current['version'] - 1,
+            ];
+            $changes[] = $this->auditChange('shipments', $matchedShipId, 'updated');
+
+            $recipName = 'ผู้รับ';
+            if (!empty($current['donation_id'])) {
+                $don = $donations[(string)$current['donation_id']] ?? null;
+                if ($don && !empty($don['contact_id'])) {
+                    $c = $contacts[(string)$don['contact_id']] ?? null;
+                    if ($c && !empty($c['name'])) $recipName = $c['name'];
+                }
+            }
+
+            $updated[] = [
+                'shipment_id' => $matchedShipId,
+                'recipient_name' => $recipName,
+                'tracking_no' => $trackingNo,
+                'match' => $matchKey,
+            ];
+
+            unset($shipments[$matchedShipId]);
+        }
+
+        if (!empty($changes)) {
+            $this->store->transact($changes);
+        }
+
+        crm_json([
+            'ok' => true,
+            'updated_count' => count($updated),
+            'failed_count' => count($failed),
+            'updated' => $updated,
+            'failed' => $failed,
         ]);
     }
     private function dbInfo(): never {
