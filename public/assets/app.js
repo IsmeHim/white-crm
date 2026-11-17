@@ -141,7 +141,11 @@
   };
   const labelFor=m=>state.modules[m]?.label||({dashboard:'ภาพรวมระบบ',reports:'รายงานและสถิติ',users:'ผู้ใช้งานและสิทธิ์',audit:'ประวัติการทำงาน',settings:'ตั้งค่าส่วนตัว'}[m]||m);
   function makeNav(){
-    $('#nav-main').innerHTML=groups.map(([name,items])=>`<div class="side-section" style="padding-top:16px">${esc(name)}</div>${items.filter(m=>roleAllows(m)).map(m=>`<a class="nav-link ${m===state.module?'active':''}" href="?module=${m}" data-nav="${m}"><span class="nav-icon">${icons[m]}</span>${esc(labelFor(m))}</a>`).join('')}`).join('');
+    $('#nav-main').innerHTML=groups.map(([name,items])=>{
+      const visible=items.filter(m=>roleAllows(m));
+      if(!visible.length)return '';
+      return `<div class="side-section" style="padding-top:16px">${esc(name)}</div>${visible.map(m=>`<a class="nav-link ${m===state.module?'active':''}" href="?module=${m}" data-nav="${m}"><span class="nav-icon">${icons[m]}</span>${esc(labelFor(m))}</a>`).join('')}`;
+    }).join('');
     const mobile=['dashboard','contacts','donations','tasks','settings'].filter(m=>roleAllows(m));
     $('#mobile-nav').innerHTML=mobile.map(m=>`<button data-nav="${m}" class="${m===state.module?'active':''}"><span>${icons[m]}</span>${esc(m==='dashboard'?'หน้าแรก':m==='contacts'?'สมาชิก':m==='donations'?'บริจาค':m==='tasks'?'ติดตาม':'ตั้งค่า')}</button>`).join('');
     $('#crumb-current').textContent=labelFor(state.module);
@@ -168,7 +172,7 @@
     const trend=buildTrendChart(a.by_month, a.by_month_counts||{}, 'ยังไม่มีรายการบริจาคที่ยืนยัน', currentChartMode);
     let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
     const campCounts=a.by_campaign_counts||{};
-    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',btn('＋ เพิ่มรายการบริจาค','new-donation','primary'))+
+    $('#page-content').innerHTML=header('OVERVIEW / DASHBOARD','ภาพรวมระบบ','สรุปข้อมูลการดำเนินงานจากข้อมูลจริงในระบบ',roleAllows('donations',true)?btn('＋ เพิ่มรายการบริจาค','new-donation','primary'):'')+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคตามโครงการ</h3><small>เรียงตามยอดรวม</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ยังไม่มีข้อมูล</div>'}</div></section></div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><h3>ภาพรวมการดำเนินงาน</h3></div><div class="stat-list">${[['รายการบริจาคทั้งหมด',num(c.donations)],['งานติดตาม',num(c.tasks)],['รายการฮาดียะห์',num(c.hadeeya)],['ล็อตสินค้า',num(c.stock_lots)],['ความคิดเห็น / ข้อเสนอแนะ',num(c.feedback)]].map(([k,v])=>`<div class="stat-list-row"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join('')}</div></section><section class="panel"><div class="panel-head"><h3>ประกาศล่าสุด</h3></div>${(a.announcements||[]).length?(a.announcements||[]).map(p=>`<div class="item-row"><span class="mini-dot"></span><div><div class="item-title">${esc(p.title)}</div><div class="item-small">${esc(dateDisplay(p.created_at))}</div></div></div>`).join(''):'<div class="empty">ยังไม่มีประกาศ</div>'}</section></div>`;
@@ -1299,7 +1303,7 @@
     let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
     const campCounts=a.by_campaign_counts||{};
     const box=$('#page-content');
-    box.innerHTML=header('ANALYTICS / REPORTS','รายงานและสถิติ','วิเคราะห์ยอดบริจาคตามช่วงวันที่ โครงการ และส่งออกข้อมูล CSV',btn('＋ เพิ่มรายการบริจาค','new-donation','primary'))+
+    box.innerHTML=header('ANALYTICS / REPORTS','รายงานและสถิติ','วิเคราะห์ยอดบริจาคตามช่วงวันที่ โครงการ และส่งออกข้อมูล CSV',roleAllows('donations',true)?btn('＋ เพิ่มรายการบริจาค','new-donation','primary'):'')+
       renderDateFilterBar()+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
       <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>${esc(periodNote)} · ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-rep-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-rep-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="rep-trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคแยกตามโครงการ</h3><small>${esc(periodNote)}</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ไม่มีข้อมูลในช่วงเวลานี้</div>'}</div></section></div>
@@ -1475,17 +1479,17 @@
     const isAdmin=state.user?.role==='admin';
     let aiCfg={enabled:false,has_key:false,masked_key:'',model:'gemini-3.5-flash-lite',auto_fallback:true,usage:{},can_edit:isAdmin};
     let dbInfo=null;
-    try{aiCfg=await api('ai-config');}catch(e){}
+    if(isAdmin){try{aiCfg=await api('ai-config');}catch(e){}}
     if(isAdmin){try{dbInfo=await api('db-info');}catch(e){}}
     const fmtKB=b=>b>=1048576?(b/1048576).toFixed(2)+' MB':Math.max(1,Math.round((b||0)/1024))+' KB';
-    $('#page-content').innerHTML=header('PREFERENCES / SETTINGS','ตั้งค่าระบบส่วนตัว','เปลี่ยนธีม รหัสผ่าน สำรองฐานข้อมูล และตั้งค่า Gemini AI ช่วยค้นหา')+
+    $('#page-content').innerHTML=header('PREFERENCES / SETTINGS','ตั้งค่าระบบส่วนตัว',isAdmin?'เปลี่ยนธีม รหัสผ่าน สำรองฐานข้อมูล และตั้งค่า Gemini AI ช่วยค้นหา':'เปลี่ยนธีมและรหัสผ่านส่วนตัว')+
       `<div class="dashboard-grid">
         <section class="panel"><h3>ธีมสีแอปพลิเคชัน</h3><p class="muted">ระบบรองรับธีมดั้งเดิม Modern Navy และ Dark Mode</p><div class="form-grid"><button type="button" class="btn ${t==='premium'?'primary':''}" data-theme="premium">◉ Premium Navy + Olive</button><button type="button" class="btn ${t==='classic'?'primary':''}" data-theme="classic">◉ Classic Green + White</button><button type="button" class="btn ${t==='dark'?'primary':''}" data-theme="dark">◉ Dark Professional</button></div></section>
         <section class="panel"><h3>เปลี่ยนรหัสผ่าน</h3><div id="password-form" class="stack" style="display:grid;gap:14px"><label class="form-field"><span class="field-title">รหัสผ่านปัจจุบัน <span class="req-star">*</span></span><input name="current_password" type="password" placeholder="กรอกรหัสผ่านที่ใช้งานอยู่ในปัจจุบัน…" autocomplete="current-password"></label><label class="form-field"><span class="field-title">รหัสผ่านใหม่ (12 ตัวขึ้นไป) <span class="req-star">*</span></span><input name="new_password" type="password" minlength="12" placeholder="ตั้งรหัสผ่านใหม่อย่างน้อย 12 ตัวอักษร…" autocomplete="new-password"></label><div class="form-actions" style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><small class="muted">🔒 รหัสผ่านต้องมีความยาว 12 ตัวขึ้นไป</small><button type="button" id="save-password-btn" class="btn primary" style="font-weight:800;padding:0 18px">✓ บันทึกรหัสผ่านใหม่</button></div></div></section>
       </div>
-      <section class="panel" style="margin-bottom:18px">
+      ${isAdmin?`<section class="panel" style="margin-bottom:18px">
         <div class="panel-head"><div><h3>✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ</h3><small>ช่วยให้พิมพ์ค้นหาหรือสั่งเปิดหน้าต่างๆ ได้แม่นยำแม้พิมพ์สะกดผิด หรือพิมพ์คำใกล้เคียง</small></div><span id="ai-status-pill" class="pill ${aiCfg.enabled&&aiCfg.has_key?'green':'yellow'}">${aiCfg.enabled&&aiCfg.has_key?'✦ เปิดใช้งาน AI แล้ว':'ยังไม่ได้ตั้งค่า API Key'}</span></div>
-        ${aiCfg.can_edit?`<div id="ai-config-form" class="stack" style="display:grid;gap:18px">
+        <div id="ai-config-form" class="stack" style="display:grid;gap:18px">
           <div class="form-grid">
             <div>
               <div class="field-label-row" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px">
@@ -1515,8 +1519,8 @@
           <div id="ai-quota-wrap">${renderQuotaCard(aiCfg.usage, aiCfg.model)}</div>
           <div class="secondary-note" style="margin-bottom:12px"><strong>หมายเหตุเรื่องการดึงโควต้าจาก Google AI Studio:</strong> Google ไม่ได้เปิด Public API ให้ดึงหน้าตาราง Rate Limit โดยตรงด้วย API Key ธรรมดา แต่จะส่ง <code>usageMetadata (จำนวน Tokens)</code> กลับมาทุกครั้งที่เรียกใช้งาน ระบบนี้จึงทำหน้าที่<strong>นับและคำนวณโควต้าที่ใช้ไป/คงเหลือ (RPD, RPM, TPM) ของแต่ละโมเดลให้อัตโนมัติ</strong>ตามเกณฑ์ของ Google AI Studio ครับ</div>
           <div class="form-actions" style="margin-top:10px">${aiCfg.has_key?`<button type="button" class="btn danger" id="clear-ai-key">ลบ API Key</button>`:''}<button type="button" id="save-ai-btn" class="btn primary">✦ บันทึกตั้งค่า Gemini AI</button></div>
-        </div>`:`<p class="muted">เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สามารถแก้ไข Gemini API Key ได้</p><div id="ai-quota-wrap">${renderQuotaCard(aiCfg.usage, aiCfg.model)}</div>`}
-      </section>
+        </div>
+      </section>`:''}
       <section class="panel">
         <div class="panel-head">
           <div>
@@ -1615,9 +1619,10 @@
     document.querySelectorAll('.clear-ai-key-btn').forEach(btn => btn.addEventListener('click', handleClearKey));
   }
   async function openAiConfigModal(){
-    let aiCfg={enabled:false,has_key:false,masked_key:'',model:'gemini-3.5-flash-lite',auto_fallback:true,usage:{},can_edit:state.user?.role==='admin'};
+    if(state.user?.role!=='admin')return;
+    let aiCfg={enabled:false,has_key:false,masked_key:'',model:'gemini-3.5-flash-lite',auto_fallback:true,usage:{},can_edit:true};
     try{aiCfg=await api('ai-config');}catch(e){}
-    if(!aiCfg.can_edit){navigate('settings');return;}
+    if(!aiCfg.can_edit)return;
     const curUsage = aiCfg.usage?.all?.[aiCfg.model] || aiCfg.usage?.active;
     modal('✦ ตั้งค่า Gemini AI ช่วยค้นหาอัจฉริยะ',`<div id="modal-ai-form" class="stack" style="display:grid;gap:18px">
       <div class="ai-box"><div class="ai-box-head"><span>✦ AI Smart Search & Navigation</span><span>${aiCfg.enabled&&aiCfg.has_key?'เปิดใช้งานแล้ว':'ยังไม่ตั้งค่า'}</span></div><div class="ai-box-text">เมื่อเปิดใช้งาน ระบบจะใช้ Gemini ช่วยเดาคำค้นหาที่พิมพ์ผิด (เช่น พิมพ์ "บริจาก", "สมาชิค", "ส่งของ") แล้วพาไปยังหน้าที่ถูกต้องหรือเปิดข้อมูลให้ทันที${curUsage?`<br><strong style="color:var(--accent-text)">📊 โควต้าวันนี้ (${esc(aiCfg.model)}): ใช้ไป ${num(curUsage.rpd_used)} / ${num(curUsage.rpd_limit)} ครั้ง (คงเหลือ ${num(curUsage.rpd_remaining)} ครั้ง)</strong>`:''}</div></div>
@@ -1734,7 +1739,7 @@
         setTimeout(()=>viewRecord(mod,id),80);
       }));
       container.querySelector('#trigger-ai-search')?.addEventListener('click',e=>{
-        e.stopPropagation();const q=input.value.trim();if(q)runAiSearch(q);else openAiConfigModal();
+        e.stopPropagation();const q=input.value.trim();if(q)runAiSearch(q);else if(state.user?.role==='admin')openAiConfigModal();else input.focus();
       });
       container.querySelector('#open-ai-config')?.addEventListener('click',e=>{
         e.stopPropagation();hide();openAiConfigModal();
@@ -1742,7 +1747,8 @@
     };
     const renderQuickNav=()=>{
       const quick=['contacts','donations','campaigns','shipments','tasks','hadeeya'].filter(m=>roleAllows(m));
-      box.innerHTML=`<div class="top-search-head"><span>ทางลัดไปยังโมดูล</span><button type="button" class="btn small ghost" id="open-ai-config" style="padding:2px 7px;min-height:22px;font-size:10px;color:var(--accent-text)">⚙ ตั้งค่า AI</button></div>`+quick.map(m=>`<button type="button" class="top-search-item" data-qnav="${esc(m)}"><span class="top-search-item-icon">${icons[m]||'•'}</span><div class="top-search-item-body"><div class="top-search-item-title">${esc(labelFor(m))}</div><div class="top-search-item-sub">เปิดหน้าจัดการ${esc(labelFor(m))}</div></div><span class="top-search-item-badge">โมดูล</span></button>`).join('');
+      const aiConfigBtn=state.user?.role==='admin'?`<button type="button" class="btn small ghost" id="open-ai-config" style="padding:2px 7px;min-height:22px;font-size:10px;color:var(--accent-text)">⚙ ตั้งค่า AI</button>`:'';
+      box.innerHTML=`<div class="top-search-head"><span>ทางลัดไปยังโมดูล</span>${aiConfigBtn}</div>`+quick.map(m=>`<button type="button" class="top-search-item" data-qnav="${esc(m)}"><span class="top-search-item-icon">${icons[m]||'•'}</span><div class="top-search-item-body"><div class="top-search-item-title">${esc(labelFor(m))}</div><div class="top-search-item-sub">เปิดหน้าจัดการ${esc(labelFor(m))}</div></div><span class="top-search-item-badge">โมดูล</span></button>`).join('');
       box.classList.remove('hidden');
       wireResultClicks(box);
     };
