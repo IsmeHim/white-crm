@@ -269,10 +269,13 @@
           acts+=`<button type="button" class="btn small quick-act-btn" data-ship-dispatch="${esc(row.id)}" title="บันทึกเลขพัสดุและจัดส่ง">🚚 ส่งพัสดุ</button>`;
         }
       } else if(st==='shipped'){
+        acts+=`<button type="button" class="btn small ghost" data-ship-notify="${esc(row.id)}" title="คัดลอกข้อความแจ้งผู้บริจาคทาง LINE / SMS" style="color:var(--accent-text);border-color:rgba(162,187,59,.4)">💬 แจ้งพัสดุ</button>`;
         if(canWrite){
           acts+=`<button type="button" class="btn small primary quick-act-btn" data-qact-id="${esc(row.id)}" data-qact-val="delivered" title="ผู้รับได้รับของเรียบร้อยแล้ว">✓ รับสำเร็จ</button>`;
           acts+=`<button type="button" class="btn small ghost" data-ship-return="${esc(row.id)}" title="พัสดุตีกลับ (คืนสต็อกเข้าคลัง)" style="color:#e05244">↺ ตีกลับ</button>`;
         }
+      } else if(st==='delivered'){
+        acts+=`<button type="button" class="btn small ghost" data-ship-notify="${esc(row.id)}" title="ดูหรือคัดลอกข้อความแจ้งพัสดุ">💬 ข้อความแจ้ง</button>`;
       }
       acts+=`<button class="btn small" data-view="${esc(row.id)}">ดูข้อมูล</button>`;
       if(canWrite && !['delivered','returned','cancelled'].includes(st)){
@@ -327,6 +330,7 @@
       <div class="batch-bar-right">
         <button type="button" class="btn primary btn-batch-print" id="btn-batch-print" disabled title="เลือกรายการจากตารางแล้วสั่งพิมพ์พร้อมกัน">🖨 พิมพ์ใบปะหน้าชุดที่เลือก (<span id="batch-count-num">0</span>)</button>
         <button type="button" class="btn" id="btn-print-all-preparing" title="ดึงรายการที่สถานะ 'เตรียมจัดส่ง' ทั้งหมดในระบบมาพิมพ์ทันที">🏷 พิมพ์รายการค้างส่งทั้งหมดในระบบ</button>
+        ${canWrite?`<button type="button" class="btn" id="btn-import-tracking" title="นำเข้าเลขพัสดุจากไฟล์ CSV หรือคัดลอกจาก Excel ขนส่งเพื่ออัปเดตเป็นชุด">📥 นำเข้าเลขพัสดุ (CSV)</button>`:''}
       </div>
     </div>`:'';
     $('#page-content').innerHTML=header('MANAGEMENT / '+m.toUpperCase(),schema.label,'จัดการข้อมูลพร้อมระบบค้นหาและบันทึกประวัติการเปลี่ยนแปลง',actions)+
@@ -352,6 +356,7 @@
     document.querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>openForm(m,b.dataset.edit)));
     document.querySelectorAll('[data-print-shipment]').forEach(b=>b.addEventListener('click',()=>openShippingLabels({id:b.dataset.printShipment})));
     document.querySelectorAll('[data-ship-dispatch]').forEach(b=>b.addEventListener('click',()=>openQuickDispatchModal(b.dataset.shipDispatch)));
+    document.querySelectorAll('[data-ship-notify]').forEach(b=>b.addEventListener('click',()=>openTrackingNotifyModal(b.dataset.shipNotify)));
     document.querySelectorAll('[data-ship-return]').forEach(b=>b.addEventListener('click',()=>confirmReturnShipment(b.dataset.shipReturn)));
     document.querySelectorAll('[data-quick-id]').forEach(sel=>sel.addEventListener('change',e=>{
       updateQuickStatus(sel.dataset.quickModule,sel.dataset.quickId,sel.dataset.quickField,e.target.value,sel);
@@ -409,6 +414,10 @@
 
       $('#btn-print-all-preparing')?.addEventListener('click',()=>{
         openShippingLabels({preparing:1});
+      });
+
+      $('#btn-import-tracking')?.addEventListener('click',()=>{
+        openBatchImportTrackingModal();
       });
     }
   }
@@ -925,12 +934,13 @@
         const stBadge=r.stock_deducted?`<span class="pill green">✓ ตัดสต็อกจากล็อตอัตโนมัติแล้ว (${num(r.deducted_qty||r.quantity||1)} ชิ้น)</span>`:`<span class="pill yellow">↺ คืนสต็อกแล้ว / ยังไม่ตัดสต็อก</span>`;
         fields+=`<div class="detail-block"><div class="detail-label">สถานะการตัดสต็อกคลังสินค้า</div><div class="detail-value">${stBadge}</div></div>`;
       }
-      modal('รายละเอียด • '+schema.label,fields+`<div class="detail-block"><div class="detail-label">รหัสระบบ / เวอร์ชัน</div><div class="detail-value">${esc(r.id)} / v${esc(r.version)}</div></div><div class="form-actions">${module==='contacts'?btn('♙ โปรไฟล์ 360°','profile',''):''}${module==='donations'&&roleAllows('shipments',true)?btn('▰ สร้างรายการจัดส่งฮาดียะห์','create-shipment','primary'):''}${module==='shipments'?btn('🖨 พิมพ์ใบปะหน้าพัสดุ','print-label','primary'):''}${module==='stock_lots'&&roleAllows('inventory_moves',true)?btn('⇄ ปรับสต็อก','movement','primary'):''}${['shipments','campaigns'].includes(module)&&roleAllows(module,true)?btn('⇧ แนบหลักฐาน / ภาพ','upload',''):''}${roleAllows(module,true)&&!schema.readonly?btn('แก้ไขรายการ','edit',''):''}</div>`);
+      modal('รายละเอียด • '+schema.label,fields+`<div class="detail-block"><div class="detail-label">รหัสระบบ / เวอร์ชัน</div><div class="detail-value">${esc(r.id)} / v${esc(r.version)}</div></div><div class="form-actions">${module==='contacts'?btn('♙ โปรไฟล์ 360°','profile',''):''}${module==='donations'&&roleAllows('shipments',true)?btn('▰ สร้างรายการจัดส่งฮาดียะห์','create-shipment','primary'):''}${module==='shipments'?btn('🖨 พิมพ์ใบปะหน้าพัสดุ','print-label','primary'):''}${module==='shipments'&&(r.tracking_no||['shipped','delivered'].includes(r.status))?btn('💬 แจ้งพัสดุผู้บริจาค','notify-donor',''):''}${module==='stock_lots'&&roleAllows('inventory_moves',true)?btn('⇄ ปรับสต็อก','movement','primary'):''}${['shipments','campaigns'].includes(module)&&roleAllows(module,true)?btn('⇧ แนบหลักฐาน / ภาพ','upload',''):''}${roleAllows(module,true)&&!schema.readonly?btn('แก้ไขรายการ','edit',''):''}</div>`);
       $('[data-action="edit"]')?.addEventListener('click',()=>openForm(module,id));
       $('[data-action="movement"]')?.addEventListener('click',()=>openMovement(id));
       $('[data-action="upload"]')?.addEventListener('click',()=>openUpload(module,id));
       $('[data-action="create-shipment"]')?.addEventListener('click',()=>openForm('shipments',null,{donation_id:id}));
       $('[data-action="print-label"]')?.addEventListener('click',()=>openShippingLabels({id}));
+      $('[data-action="notify-donor"]')?.addEventListener('click',()=>openTrackingNotifyModal(id));
     }catch(e){toast(e.message,true);}
   }
   async function openShippingLabels(opts={}){
@@ -1258,6 +1268,9 @@
           closeModal();
           toast('บันทึกการจัดส่งเรียบร้อยแล้ว');
           render();
+          if(trackingNo){
+            setTimeout(()=>openTrackingNotifyModal(shipmentId), 180);
+          }
         }catch(err){
           toast(err.message,true);
         }
@@ -1276,6 +1289,316 @@
     }catch(err){
       toast(err.message,true);
     }
+  }
+  async function openTrackingNotifyModal(shipmentId){
+    try{
+      toast('กำลังดึงข้อมูลพัสดุและจัดเตรียมข้อความ…');
+      const data=await api('shipping-labels',{id:shipmentId});
+      const lbl=data.labels?.[0];
+      if(!lbl)throw new Error('ไม่พบข้อมูลรายการจัดส่งนี้');
+
+      const recipName=lbl.recipient?.name||'ผู้มีจิตศรัทธา';
+      const recipPhone=lbl.recipient?.phone||'';
+      const cleanPhone=recipPhone.replace(/\D/g,'');
+      const itemName=lbl.item?.name||'ของที่ระลึก ฮาดียะห์ White Channel';
+      const itemQty=lbl.item?.quantity||1;
+      const itemUnit=lbl.item?.unit||'ชิ้น';
+      const courierName=lbl.courier_name||'ขนส่งพัสดุด่วน';
+      const trackingNo=lbl.tracking_no||'—';
+      const trackingUrl=lbl.tracking_url||(trackingNo!=='—'?`https://www.google.com/search?q=${encodeURIComponent(trackingNo)}`:'');
+
+      let defaultMsg=`เรียน คุณ${recipName}\n`;
+      defaultMsg+=`มูลนิธิศรัทธาชนเพื่อการศึกษาและเด็กกำพร้า (White Channel) ขอขอบพระคุณท่านเป็นอย่างยิ่งที่ได้ร่วมบริจาคสนับสนุน\n\n`;
+      defaultMsg+=`ทางมูลนิธิฯ ได้จัดส่งของที่ระลึกฮาดียะห์ "${itemName}" (${itemQty} ${itemUnit}) ให้ท่านเรียบร้อยแล้วครับ\n\n`;
+      defaultMsg+=`🚚 ขนส่ง: ${courierName}\n`;
+      defaultMsg+=`📦 หมายเลขพัสดุ (Tracking No.): ${trackingNo}\n`;
+      if(trackingUrl){
+        defaultMsg+=`🔍 ตรวจสอบสถานะการจัดส่งได้ที่:\n${trackingUrl}\n`;
+      }
+      defaultMsg+=`\nขออัลลอฮฺทรงตอบแทนความดีงามและความจำเริญแด่ท่านและครอบครัวครับ (ญะซากุมุลลอฮุค็อยร็อน)`;
+
+      const lineShareUrl=`https://line.me/R/msg/text/?${encodeURIComponent(defaultMsg)}`;
+      const smsUrl=cleanPhone?`sms:${cleanPhone}?body=${encodeURIComponent(defaultMsg)}`:'';
+
+      const modalHtml=`
+        <div class="stack" style="display:grid;gap:14px">
+          <div style="background:var(--card-sub);padding:14px 16px;border-radius:12px;border:1px solid var(--line);display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:12.5px">
+            <div><span class="muted">ผู้รับ:</span> <strong>${esc(recipName)}</strong></div>
+            <div><span class="muted">เบอร์โทร:</span> ${recipPhone?`<a href="tel:${esc(cleanPhone)}" style="color:var(--accent-text);font-weight:700">📞 ${esc(recipPhone)}</a>`:'—'}</div>
+            <div><span class="muted">ขนส่ง:</span> <strong>${esc(courierName)}</strong></div>
+            <div><span class="muted">เลขพัสดุ:</span> <strong style="font-family:monospace;font-size:13px">${esc(trackingNo)}</strong> ${trackingUrl?`<a href="${esc(trackingUrl)}" target="_blank" rel="noopener" class="pill green" style="padding:1px 6px;margin-left:4px;font-size:10px">↗ เช็กพัสดุ</a>`:''}</div>
+          </div>
+
+          <div>
+            <label class="form-field" style="margin-top:0">
+              <span class="field-title" style="display:flex;justify-content:space-between;align-items:center">
+                <span>ข้อความแจ้งผู้บริจาค (สามารถแก้ไขเพิ่มเติมได้ก่อนกดก๊อปปี้)</span>
+                <span class="muted" style="font-weight:normal;font-size:11px">พร้อมส่งใน LINE หรือ SMS ทันที</span>
+              </span>
+              <textarea id="notify-msg-text" rows="10" style="font-size:13px;line-height:1.6;font-family:inherit">${esc(defaultMsg)}</textarea>
+            </label>
+          </div>
+
+          <div class="form-actions" style="display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:14px">
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button type="button" class="btn primary" id="btn-copy-notify-msg" style="gap:6px">
+                <span>📋 คัดลอกข้อความ (Copy)</span>
+              </button>
+              <a href="${esc(lineShareUrl)}" target="_blank" rel="noopener" class="btn" style="background:#06c755;color:#fff;border-color:#06c755;gap:6px" id="btn-line-share">
+                <span>🟢 เปิดแชร์เข้า LINE</span>
+              </a>
+              ${cleanPhone?`<a href="${esc(smsUrl)}" class="btn" style="gap:6px" id="btn-sms-send"><span>📱 ส่ง SMS</span></a>`:''}
+            </div>
+            <button type="button" class="btn ghost" id="notify-modal-close">ปิด</button>
+          </div>
+        </div>
+      `;
+
+      modal('💬 ข้อความแจ้งเลขพัสดุผู้บริจาค (LINE / SMS)', modalHtml, true);
+      $('#notify-modal-close')?.addEventListener('click', closeModal);
+
+      const msgArea=$('#notify-msg-text');
+      const lineBtn=$('#btn-line-share');
+      const smsBtn=$('#btn-sms-send');
+      msgArea?.addEventListener('input',()=>{
+        const txt=msgArea.value;
+        if(lineBtn)lineBtn.href=`https://line.me/R/msg/text/?${encodeURIComponent(txt)}`;
+        if(smsBtn&&cleanPhone)smsBtn.href=`sms:${cleanPhone}?body=${encodeURIComponent(txt)}`;
+      });
+
+      $('#btn-copy-notify-msg')?.addEventListener('click', async ()=>{
+        const txt=msgArea?.value||defaultMsg;
+        try{
+          if(navigator.clipboard && window.isSecureContext){
+            await navigator.clipboard.writeText(txt);
+          } else {
+            const ta=document.createElement('textarea');
+            ta.value=txt;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            ta.remove();
+          }
+          toast('✓ คัดลอกข้อความเรียบร้อย นำไปวางใน LINE หรือแชทได้ทันที!');
+        }catch(e){
+          toast('คัดลอกไม่สำเร็จ โปรดลากแถบดำเพื่อคัดลอกด้วยตนเอง', true);
+        }
+      });
+    }catch(err){
+      toast(err.message,true);
+    }
+  }
+  async function openBatchImportTrackingModal(){
+    const couriers=state.optionItems?.delivery_companies||{};
+    const courierOptions=Object.values(couriers).map(c=>`<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+    const today=new Date().toISOString().slice(0,10);
+
+    const parseTrackingInput=(raw)=>{
+      const lines=raw.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+      const items=[];
+      const isTracking=t=>/^(TH\d|[A-Z]{2}\d{9}[A-Z]{2}|JT\w+|KEX\w+|KER\w+|SHP\w+|SPX\w+|\d{10,22})/i.test(t);
+
+      const cleanMatchKey=(str)=>{
+        const rcp=str.match(/RCP-[\w-]+/i);
+        if(rcp)return rcp[0];
+        const shp=str.match(/shp_[\w-]+/i);
+        if(shp)return shp[0];
+        const phone=str.match(/0[2-9][0-9-]{7,11}/);
+        if(phone)return phone[0];
+        return str.trim();
+      };
+
+      let pendingRef=null;
+      let pendingTracking=null;
+
+      for(let i=0;i<lines.length;i++){
+        const line=lines[i];
+        let parts=line.split(/[\t,;|]/).map(p=>p.trim()).filter(Boolean);
+        if(parts.length<2)parts=line.split(/\s+/).map(p=>p.trim()).filter(Boolean);
+
+        if(parts.length>=2){
+          let tracking='';
+          let match='';
+          const trkIdx=parts.findIndex(isTracking);
+          if(trkIdx!==-1){
+            tracking=parts[trkIdx];
+            const rest=parts.filter((_,idx)=>idx!==trkIdx);
+            match=rest.join(' ');
+          } else {
+            match=parts.join(' ');
+          }
+
+          if(tracking && match){
+            items.push({tracking_no:tracking,match:cleanMatchKey(match)});
+            pendingRef=null;pendingTracking=null;
+            continue;
+          } else {
+            if(pendingTracking){
+              items.push({tracking_no:pendingTracking,match:cleanMatchKey(match)});
+              pendingTracking=null;
+              continue;
+            } else {
+              pendingRef=match;
+              continue;
+            }
+          }
+        }
+
+        const single=parts[0]||line;
+        if(isTracking(single)){
+          if(pendingRef){
+            items.push({tracking_no:single,match:cleanMatchKey(pendingRef)});
+            pendingRef=null;
+          } else {
+            pendingTracking=single;
+          }
+        } else {
+          if(pendingTracking){
+            items.push({tracking_no:pendingTracking,match:cleanMatchKey(single)});
+            pendingTracking=null;
+          } else {
+            pendingRef=single;
+          }
+        }
+      }
+      return items;
+    };
+
+    const modalHtml=`
+      <div class="stack" style="display:grid;gap:14px">
+        <div class="secondary-note" style="font-size:12px;line-height:1.6">
+          <strong>💡 วิธีนำเข้าเลขพัสดุ (ยืดหยุ่นสูง วางได้ทันที):</strong>
+          <br>• <strong>ในบรรทัดเดียวกัน:</strong> คั่นด้วยเคาะเว้นวรรค แท็บ หรือเครื่องหมายจุลภาค <code>,</code> เช่น:
+          <br>&nbsp;&nbsp;<code>TH8899001122B  RCP-20261111-001</code> หรือ <code>TH8899001122B  081-234-5678</code>
+          <br>• <strong>สลับหน้าหลังได้:</strong> <code>RCP-20261111-001  TH8899001122B</code> (ระบบแยกแยะเลขพัสดุและเลขอ้างอิงให้อัตโนมัติ)
+          <br>• <strong>คนละบรรทัด:</strong> บรรทัดหนึ่งเป็นเลขอ้างอิง/เบอร์โทร และอีกบรรทัดเป็นเลขพัสดุ ระบบก็จับคู่ให้เองได้ครับ
+        </div>
+
+        <div class="form-grid">
+          <label class="form-field">
+            <span class="field-title">บริษัทขนส่ง</span>
+            <select id="import-courier-select">
+              <option value="">— เลือกบริษัทขนส่ง (ถ้ามี) —</option>
+              ${courierOptions}
+            </select>
+          </label>
+          <label class="form-field">
+            <span class="field-title">วันที่จัดส่ง</span>
+            <input type="date" id="import-sent-date" value="${today}">
+          </label>
+          <label class="form-field field-full">
+            <span class="field-title">เลือกไฟล์ CSV หรือ TXT (หรือวางข้อความด้านล่างโดยตรง)</span>
+            <input type="file" id="import-file-input" accept=".csv,.txt">
+          </label>
+          <label class="form-field field-full">
+            <span class="field-title">กล่องข้อความข้อมูลพัสดุ (คัดลอกจาก Excel มาวางได้เลย) <span class="req-star">*</span></span>
+            <textarea id="import-raw-text" rows="7" placeholder="วางข้อมูลที่นี่ เช่น:\nTH8899001122B  RCP-20261111-001\nEF582568151TH  081-234-5678\nJTTH208578789576  อับดุลเลาะห์"></textarea>
+            <div id="import-preview-box" style="margin-top:8px;padding:8px 12px;border-radius:8px;background:var(--card-sub);border:1px solid var(--line);font-size:12px;display:none"></div>
+          </label>
+        </div>
+
+        <div class="form-actions" style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--line);padding-top:14px">
+          <span id="import-status-text" class="muted" style="font-size:12px">ยังไม่ได้นำเข้า</span>
+          <div style="display:flex;gap:10px">
+            <button type="button" class="btn" id="btn-cancel-import">ยกเลิก</button>
+            <button type="button" class="btn primary" id="btn-execute-import" style="gap:6px">
+              <span>✓ นำเข้าและอัปเดตสถานะจัดส่ง</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    modal('📥 นำเข้าเลขพัสดุเป็นชุด (Batch Tracking Import)', modalHtml, true);
+    $('#btn-cancel-import')?.addEventListener('click', closeModal);
+
+    const rawArea=$('#import-raw-text');
+    const previewBox=$('#import-preview-box');
+    const statusText=$('#import-status-text');
+
+    const updateLivePreview=()=>{
+      const raw=(rawArea?.value||'').trim();
+      if(!raw){
+        if(previewBox)previewBox.style.display='none';
+        if(statusText)statusText.textContent='ยังไม่ได้ระบุข้อมูล';
+        return;
+      }
+      const items=parseTrackingInput(raw);
+      if(items.length>0){
+        previewBox.style.display='block';
+        previewBox.innerHTML=`
+          <div style="color:var(--accent-text);font-weight:750;margin-bottom:5px">✓ ตรวจพบ ${num(items.length)} รายการที่พร้อมนำเข้า:</div>
+          <div style="display:grid;gap:4px;max-height:120px;overflow-y:auto;padding-right:4px">
+            ${items.slice(0,5).map((it,idx)=>`
+              <div style="display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.05);padding:3px 8px;border-radius:5px">
+                <span class="muted">${idx+1}.</span>
+                <span>เลขพัสดุ: <strong style="font-family:monospace;color:var(--text)">${esc(it.tracking_no)}</strong></span>
+                <span class="muted">➔</span>
+                <span>อ้างอิง: <span class="pill" style="font-size:11px;padding:1px 6px">${esc(it.match)}</span></span>
+              </div>
+            `).join('')}
+            ${items.length>5?`<div class="muted" style="font-size:11px;margin-top:2px">…และอีก ${num(items.length-5)} รายการ</div>`:''}
+          </div>
+        `;
+        if(statusText)statusText.textContent=`พร้อมนำเข้า ${num(items.length)} รายการ`;
+      } else {
+        previewBox.style.display='block';
+        previewBox.innerHTML=`<span style="color:#eab308">⚠️ ยังไม่พบรูปแบบคู่เลขพัสดุกับข้อมูลอ้างอิง กรุณาตรวจสอบข้อความ</span>`;
+        if(statusText)statusText.textContent='ยังไม่พบข้อมูลที่ตรงรูปแบบ';
+      }
+    };
+
+    rawArea?.addEventListener('input', updateLivePreview);
+
+    $('#import-file-input')?.addEventListener('change', e=>{
+      const file=e.target.files?.[0];
+      if(!file)return;
+      const reader=new FileReader();
+      reader.onload=evt=>{
+        rawArea.value=evt.target.result;
+        updateLivePreview();
+      };
+      reader.readAsText(file);
+    });
+
+    $('#btn-execute-import')?.addEventListener('click', async ()=>{
+      const raw=(rawArea?.value||'').trim();
+      if(!raw){
+        toast('กรุณาระบุข้อมูลเลขพัสดุในช่องข้อความ', true);
+        return;
+      }
+
+      const items=parseTrackingInput(raw);
+
+      if(!items.length){
+        toast('ไม่พบรูปแบบ "เลขพัสดุ และ ข้อมูลอ้างอิง" ในข้อความที่ระบุ กรุณาตรวจสอบ', true);
+        return;
+      }
+
+      const btn=$('#btn-execute-import');
+      btn.disabled=true;
+      btn.textContent='กำลังนำเข้าและจับคู่ข้อมูล…';
+
+      try{
+        const courierId=$('#import-courier-select')?.value||'';
+        const sentAt=$('#import-sent-date')?.value||today;
+
+        const res=await api('import-tracking',{},'POST',{
+          items,
+          courier_id:courierId,
+          sent_at:sentAt
+        });
+
+        closeModal();
+        delete state.options.stock_lots;
+        toast(`✓ นำเข้าสำเร็จ ${res.updated_count} รายการ${res.failed_count>0?` (ไม่พบ ${res.failed_count} รายการ)`:''}`);
+        render();
+      }catch(err){
+        toast(err.message,true);
+        btn.disabled=false;
+        btn.innerHTML='<span>✓ นำเข้าและอัปเดตสถานะจัดส่ง</span>';
+      }
+    });
   }
   function openUpload(module,id){
     modal('แนบไฟล์ / หลักฐาน',`<form id="upload-form" class="stack" style="display:grid;gap:16px"><label>เลือกไฟล์ PNG / JPG / WEBP / PDF ขนาดสูงสุด 10 MB<input type="file" name="file" accept="image/png,image/jpeg,image/webp,application/pdf" required></label><div class="secondary-note">ไฟล์ถูกเก็บนอกโฟลเดอร์ Public และเปิดผ่าน API ที่ตรวจสิทธิ์เท่านั้น</div><div class="form-actions"><button type="button" class="btn" id="cancel-modal">ยกเลิก</button><button type="submit" class="btn primary">อัปโหลด</button></div></form>`);
@@ -1933,6 +2256,13 @@
     $('#menu-open').onclick=()=>{$('#sidebar').classList.add('show');$('#overlay').classList.add('show');};$('#sidebar-close').onclick=closeSidebar;$('#overlay').onclick=closeSidebar;
     $('#modal-close').onclick=closeModal;$('#modal-backdrop').addEventListener('click',e=>{if(e.target.id==='modal-backdrop')closeModal();});
     $('#theme-toggle').onclick=()=>{const themes=['premium','classic','dark'];const i=themes.indexOf(localStorage.getItem('crm-theme')||'premium');setTheme(themes[(i+1)%3]);};
+    document.addEventListener('click',e=>{
+      const notifyBtn=e.target.closest('[data-ship-notify]');
+      if(notifyBtn){
+        e.preventDefault();
+        openTrackingNotifyModal(notifyBtn.dataset.shipNotify);
+      }
+    });
     window.addEventListener('popstate',()=>{state.module=new URLSearchParams(location.search).get('module')||'dashboard';state.page=1;makeNav();render();});
     window.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal();});
     await render();
