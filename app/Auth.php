@@ -21,30 +21,30 @@ final class Auth {
     private array $rights = [
         'admin'      => ['*'],
         'manager'    => [
-            'dashboard', 'contacts', 'categories', 'campaigns', 'receivers',
+            'dashboard', 'wallboard', 'contacts', 'categories', 'campaigns', 'receivers',
             'donations', 'hadeeya', 'stock_lots', 'inventory_moves',
             'delivery_companies', 'shipments', 'tasks', 'feedback',
             'announcements', 'reports',
         ],
         'finance'    => [
-            'dashboard', 'contacts', 'campaigns', 'receivers',
+            'dashboard', 'wallboard', 'contacts', 'campaigns', 'receivers',
             'donations', 'reports',
         ],
         'callcenter' => [
-            'dashboard', 'contacts', 'campaigns', 'donations',
+            'dashboard', 'wallboard', 'contacts', 'campaigns', 'donations',
             'receivers', 'tasks', 'feedback',
         ],
         'warehouse'  => [
-            'dashboard', 'hadeeya', 'stock_lots', 'inventory_moves',
+            'dashboard', 'wallboard', 'hadeeya', 'stock_lots', 'inventory_moves',
             'delivery_companies', 'shipments', 'donations',
         ],
         'auditor'    => [
-            'dashboard', 'contacts', 'categories', 'campaigns', 'receivers',
+            'dashboard', 'wallboard', 'contacts', 'categories', 'campaigns', 'receivers',
             'donations', 'hadeeya', 'stock_lots', 'inventory_moves',
             'delivery_companies', 'shipments', 'tasks', 'feedback',
             'announcements', 'reports', 'audit',
         ],
-        'viewer'     => ['dashboard', 'announcements'],
+        'viewer'     => ['dashboard', 'wallboard', 'announcements'],
     ];
 
     public function __construct(Store $store) {
@@ -117,7 +117,7 @@ final class Auth {
             return false;
         }
 
-        if ($module === 'reports' && $action !== 'read') {
+        if (($module === 'reports' || $module === 'wallboard') && $action !== 'read') {
             return false;
         }
 

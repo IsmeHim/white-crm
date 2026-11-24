@@ -27,6 +27,8 @@ final class Api {
                     crm_json(['modules'=>Schema::all(),'roles'=>$this->auth->roles()]);
                 case 'summary':
                     $this->auth->require('dashboard');crm_json($this->dashboard());
+                case 'wallboard':
+                    $this->wallboard();break;
                 case 'module':
                     $this->module($method);break;
                 case 'record':
@@ -141,8 +143,12 @@ final class Api {
                     $this->dbInfo();break;
                 case 'backup-download':
                     $this->backupDownload();break;
+                case 'backup-encrypted':
+                    $this->backupEncrypted($method);break;
                 case 'db-optimize':
                     $this->dbOptimize($method);break;
+                case 'export-analytics':
+                    $this->exportAnalytics();break;
                 case 'search':
                     $this->globalSearch();break;
                 case 'ai-config':
@@ -739,13 +745,47 @@ final class Api {
         $r['enabled'] = $this->isAuditEnabled();
         crm_json($r);
     }
-    private function dashboard(): array {
-        $dateFrom=isset($_GET['date_from'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_from'])?(string)$_GET['date_from']:'';
-        $dateTo=isset($_GET['date_to'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_to'])?(string)$_GET['date_to']:'';
-        $cacheKey='dashboard-overview-v4-'.$dateFrom.'-'.$dateTo;
-        $stats=$this->store->cached($cacheKey,60,function() use ($dateFrom,$dateTo){
+    private function computeAnalytics(string $dateFrom='',string $dateTo=''): array {
+        $cacheKey='dashboard-overview-v5-'.$dateFrom.'-'.$dateTo;
+        return $this->store->cached($cacheKey,60,function() use ($dateFrom,$dateTo){
             $counts=[];foreach(['contacts','campaigns','donations','hadeeya','stock_lots','shipments','tasks','feedback'] as $k)$counts[$k]=$this->store->count($k);
-            $amount=0;$pendingAmount=0;$periodCount=0;$byCampaign=[];$byCampaignCounts=[];$byMonth=[];$byMonthCounts=[];$status=[];
+
+            $contactProvinces=[];
+            foreach($this->store->summaries('contacts') as $con){
+                $prov=trim((string)($con['province']??''));
+                if($prov!=='' ){
+                    $det=Schema::detectProvince($prov);
+                    if($det!=='')$prov=$det;
+                } elseif (!empty($con['address'])) {
+                    $prov=Schema::detectProvince((string)$con['address']);
+                }
+                $contactProvinces[$con['id']]=$prov;
+            }
+
+            $receiverMap=[];
+            foreach($this->store->summaries('receivers') as $rcv){
+                $receiverMap[$rcv['id']]=[
+                    'name'=>(string)($rcv['name']??$rcv['id']),
+                    'kind'=>(string)($rcv['kind']??'other'),
+                    'active'=>($rcv['active']??'1')==='1',
+                ];
+            }
+
+            $campaignMap=[];
+            foreach($this->store->summaries('campaigns') as $cam){
+                $campaignMap[$cam['id']]=[
+                    'name'=>(string)($cam['name']??$cam['id']),
+                    'goal_satang'=>(int)($cam['goal_satang']??0),
+                    'status'=>(string)($cam['status']??'active'),
+                ];
+            }
+
+            $amount=0;$pendingAmount=0;$periodCount=0;$confirmedCount=0;
+            $byCampaign=[];$byCampaignCounts=[];$byMonth=[];$byMonthCounts=[];$status=[];
+            $rcvAgg=[];$chanAgg=[];$provAgg=[];$regAgg=[];$uniqueDonors=[];
+            $regionLabels=Schema::regionLabels();
+            $channelLabels=['bank'=>'โอนเงินธนาคาร / QR','cash'=>'เงินสด','other'=>'ช่องทางอื่น ๆ'];
+
             foreach($this->store->summaries('donations') as $d){
                 $dDate=substr((string)(($d['donated_at']??'')!==''?$d['donated_at']:($d['created_at']??'')),0,10);
                 if($dateFrom!=='' && ($dDate===''||$dDate<$dateFrom))continue;
@@ -755,23 +795,467 @@ final class Api {
                 $v=(int)($d['amount_satang']??0);
                 if($s==='pending')$pendingAmount+=$v;
                 if($s!=='confirmed')continue;
+
                 $amount+=$v;
-                $c=(string)($d['campaign_id']??'unknown');
+                $confirmedCount++;
+                $conId=trim((string)($d['contact_id']??''));
+                $donorKey=$conId!==''?$conId:('anon_'.($d['id']??$confirmedCount));
+                if($conId!=='')$uniqueDonors[$conId]=true;
+
+                $c=trim((string)($d['campaign_id']??''));
+                if($c==='')$c='unknown';
                 $byCampaign[$c]=($byCampaign[$c]??0)+$v;
                 $byCampaignCounts[$c]=($byCampaignCounts[$c]??0)+1;
+
                 $month=substr($dDate,0,7);
                 if(preg_match('/^\d{4}-\d\d$/',$month)){
                     $byMonth[$month]=($byMonth[$month]??0)+$v;
                     $byMonthCounts[$month]=($byMonthCounts[$month]??0)+1;
                 }
+
+                $rcvId=trim((string)($d['receiver_id']??''));
+                $rKey=$rcvId!==''?$rcvId:'__unassigned__';
+                if(!isset($rcvAgg[$rKey]))$rcvAgg[$rKey]=['amount'=>0,'count'=>0,'donors'=>[]];
+                $rcvAgg[$rKey]['amount']+=$v;
+                $rcvAgg[$rKey]['count']++;
+                $rcvAgg[$rKey]['donors'][$donorKey]=true;
+
+                $chan=trim((string)($d['channel']??'bank'));
+                if(!isset($channelLabels[$chan]))$chan='other';
+                if(!isset($chanAgg[$chan]))$chanAgg[$chan]=['amount'=>0,'count'=>0];
+                $chanAgg[$chan]['amount']+=$v;
+                $chanAgg[$chan]['count']++;
+
+                $prov=$conId!==''?($contactProvinces[$conId]??''):'';
+                if($prov==='')$prov='ไม่ระบุจังหวัด';
+                $reg=Schema::provinceRegion($prov);
+                if(!isset($provAgg[$prov]))$provAgg[$prov]=['region'=>$reg,'amount'=>0,'count'=>0,'donors'=>[]];
+                $provAgg[$prov]['amount']+=$v;
+                $provAgg[$prov]['count']++;
+                $provAgg[$prov]['donors'][$donorKey]=true;
+
+                if(!isset($regAgg[$reg]))$regAgg[$reg]=['amount'=>0,'count'=>0,'donors'=>[],'provinces'=>[]];
+                $regAgg[$reg]['amount']+=$v;
+                $regAgg[$reg]['count']++;
+                $regAgg[$reg]['donors'][$donorKey]=true;
+                if($prov!=='ไม่ระบุจังหวัด')$regAgg[$reg]['provinces'][$prov]=true;
             }
+
             ksort($byMonth);ksort($byMonthCounts);arsort($byCampaign);
+
+            // Build detailed campaign comparison with fundraising goal progress
+            $campaignDetails=[];
+            $seenCampaigns=[];
+            foreach($byCampaign as $cid=>$cAmt){
+                $seenCampaigns[$cid]=true;
+                $meta=$campaignMap[$cid]??['name'=>$cid==='unknown'?'ไม่ระบุโครงการ':$cid,'goal_satang'=>0,'status'=>'active'];
+                $goal=(int)$meta['goal_satang'];
+                $cnt=(int)($byCampaignCounts[$cid]??0);
+                $campaignDetails[]=[
+                    'id'=>$cid,
+                    'name'=>$meta['name'],
+                    'status'=>$meta['status'],
+                    'goal_satang'=>$goal,
+                    'amount_satang'=>$cAmt,
+                    'count'=>$cnt,
+                    'share_pct'=>$amount>0?round(($cAmt/$amount)*100,1):0.0,
+                    'goal_pct'=>$goal>0?round(($cAmt/$goal)*100,1):null,
+                ];
+            }
+            // Also include active campaigns with goals even if 0 donations in period (when no date filter or active)
+            foreach($campaignMap as $cid=>$meta){
+                if(isset($seenCampaigns[$cid]))continue;
+                if($meta['status']==='active' && $meta['goal_satang']>0 && count($campaignDetails)<15){
+                    $campaignDetails[]=[
+                        'id'=>$cid,
+                        'name'=>$meta['name'],
+                        'status'=>$meta['status'],
+                        'goal_satang'=>(int)$meta['goal_satang'],
+                        'amount_satang'=>0,
+                        'count'=>0,
+                        'share_pct'=>0.0,
+                        'goal_pct'=>0.0,
+                    ];
+                }
+            }
+
+            // Build receiver / intake channel breakdown
+            uasort($rcvAgg,fn($a,$b)=>$b['amount']<=>$a['amount'] ?: $b['count']<=>$a['count']);
+            $byReceiver=[];
+            foreach($rcvAgg as $rid=>$agg){
+                $isUnassigned=($rid==='__unassigned__');
+                $meta=$isUnassigned
+                    ?['name'=>'ไม่ระบุผู้รับแจ้ง / ช่องทาง','kind'=>'unassigned']
+                    :($receiverMap[$rid]??['name'=>$rid,'kind'=>'other']);
+                $byReceiver[]=[
+                    'id'=>$rid,
+                    'name'=>$meta['name'],
+                    'kind'=>$meta['kind'],
+                    'amount_satang'=>$agg['amount'],
+                    'count'=>$agg['count'],
+                    'donor_count'=>count($agg['donors']),
+                    'avg_satang'=>$agg['count']>0?(int)round($agg['amount']/$agg['count']):0,
+                    'share_pct'=>$amount>0?round(($agg['amount']/$amount)*100,1):0.0,
+                ];
+            }
+
+            // Build payment channel breakdown
+            uasort($chanAgg,fn($a,$b)=>$b['amount']<=>$a['amount']);
+            $byChannel=[];
+            foreach($chanAgg as $ck=>$agg){
+                $byChannel[]=[
+                    'channel'=>$ck,
+                    'label'=>$channelLabels[$ck]??$ck,
+                    'amount_satang'=>$agg['amount'],
+                    'count'=>$agg['count'],
+                    'share_pct'=>$amount>0?round(($agg['amount']/$amount)*100,1):0.0,
+                ];
+            }
+
+            // Build province breakdown (all active provinces sorted by amount)
+            uasort($provAgg,fn($a,$b)=>$b['amount']<=>$a['amount'] ?: count($b['donors'])<=>count($a['donors']));
+            $byProvince=[];
+            foreach($provAgg as $pName=>$agg){
+                $reg=$agg['region'];
+                $byProvince[]=[
+                    'province'=>$pName,
+                    'region'=>$reg,
+                    'region_label'=>$regionLabels[$reg]??'ไม่ระบุจังหวัด',
+                    'amount_satang'=>$agg['amount'],
+                    'count'=>$agg['count'],
+                    'donor_count'=>count($agg['donors']),
+                    'avg_satang'=>$agg['count']>0?(int)round($agg['amount']/$agg['count']):0,
+                    'share_pct'=>$amount>0?round(($agg['amount']/$amount)*100,1):0.0,
+                ];
+            }
+
+            // Build geographical region breakdown (include all 7 Thai regions + unknown if present)
+            $byRegion=[];
+            foreach($regionLabels as $rk=>$rLabel){
+                if($rk==='unknown' && empty($regAgg['unknown']))continue;
+                $agg=$regAgg[$rk]??['amount'=>0,'count'=>0,'donors'=>[],'provinces'=>[]];
+                $byRegion[]=[
+                    'region'=>$rk,
+                    'label'=>$rLabel,
+                    'amount_satang'=>$agg['amount'],
+                    'count'=>$agg['count'],
+                    'donor_count'=>count($agg['donors']),
+                    'province_count'=>count($agg['provinces']),
+                    'share_pct'=>$amount>0?round(($agg['amount']/$amount)*100,1):0.0,
+                ];
+            }
+            usort($byRegion,function($a,$b){
+                if($a['region']==='unknown')return 1;
+                if($b['region']==='unknown')return -1;
+                return $b['amount_satang']<=>$a['amount_satang'];
+            });
+
             $low=[];foreach($this->store->summaries('stock_lots') as $lot)if((int)($lot['quantity']??0)<=5)$low[]=['lot_code'=>$lot['lot_code']??'','quantity'=>$lot['quantity']??0];
-            return ['counts'=>$counts,'confirmed_satang'=>$amount,'pending_satang'=>$pendingAmount,'period_donations_count'=>$periodCount,'date_from'=>$dateFrom,'date_to'=>$dateTo,'donation_status'=>$status,'by_month'=>array_slice($byMonth,-12,null,true),'by_month_counts'=>array_slice($byMonthCounts,-12,null,true),'by_campaign'=>array_slice($byCampaign,0,10,true),'by_campaign_counts'=>$byCampaignCounts,'low_stock'=>array_slice($low,0,8)];
+            return [
+                'counts'=>$counts,
+                'confirmed_satang'=>$amount,
+                'confirmed_count'=>$confirmedCount,
+                'pending_satang'=>$pendingAmount,
+                'period_donations_count'=>$periodCount,
+                'unique_donors_count'=>count($uniqueDonors),
+                'avg_donation_satang'=>$confirmedCount>0?(int)round($amount/$confirmedCount):0,
+                'date_from'=>$dateFrom,
+                'date_to'=>$dateTo,
+                'donation_status'=>$status,
+                'by_month'=>array_slice($byMonth,-12,null,true),
+                'by_month_counts'=>array_slice($byMonthCounts,-12,null,true),
+                'by_campaign'=>array_slice($byCampaign,0,10,true),
+                'by_campaign_counts'=>$byCampaignCounts,
+                'campaign_details'=>$campaignDetails,
+                'by_receiver'=>$byReceiver,
+                'by_channel'=>$byChannel,
+                'by_province'=>$byProvince,
+                'by_region'=>$byRegion,
+                'low_stock'=>array_slice($low,0,8),
+            ];
         });
+    }
+    private function dashboard(): array {
+        $dateFrom=isset($_GET['date_from'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_from'])?(string)$_GET['date_from']:'';
+        $dateTo=isset($_GET['date_to'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_to'])?(string)$_GET['date_to']:'';
+        $stats=$this->computeAnalytics($dateFrom,$dateTo);
         $ann=[];foreach($this->store->summaries('announcements') as $a)if(($a['status']??'')==='published')$ann[]=['title'=>$a['title'],'created_at'=>$a['created_at']];
         usort($ann,fn($a,$b)=>strcmp($b['created_at'],$a['created_at']));$stats['announcements']=array_slice($ann,0,4);
         crm_json($stats);
+    }
+    private static function maskDonorName(string $rawName): string {
+        $clean=trim(preg_replace('/\s+/u',' ',$rawName)??'');
+        if($clean==='')return 'ผู้มีจิตศรัทธา';
+        if(preg_match('/^(บจก\.|หจก\.|บริษัท|มูลนิธิ|มัสยิด|โรงเรียน|ชมรม|สมาคม)/u',$clean)){
+            return $clean;
+        }
+        $parts=explode(' ',$clean);
+        if(count($parts)>=2){
+            $first=$parts[0];
+            $last=$parts[count($parts)-1];
+            if(preg_match('/^.\p{Mn}*/u',$last,$m)){
+                return $first.' '.$m[0].'.';
+            }
+            return $first;
+        }
+        return $clean;
+    }
+    private static function maskThaiPhone(string $rawPhone): string {
+        $digits=preg_replace('/\D+/','',$rawPhone)??'';
+        if(strlen($digits)>=10){
+            return substr($digits,0,3).'-XXX-'.substr($digits,-4);
+        }
+        if(strlen($digits)>=7){
+            return substr($digits,0,2).'-XXX-'.substr($digits,-3);
+        }
+        return '';
+    }
+    private function wallboard(): never {
+        $this->auth->require('wallboard');
+        $campaignId=trim((string)($_GET['campaign_id']??'all'));
+        if($campaignId==='')$campaignId='all';
+        $scope=($_GET['scope']??'all')==='today'?'today':'all';
+        $todayLocal=date('Y-m-d');
+
+        $cacheKey='wallboard-v2-'.$campaignId.'-'.$scope.'-'.$todayLocal;
+        $payload=$this->store->cached($cacheKey,5,function() use ($campaignId,$scope,$todayLocal){
+            $contacts=[];
+            foreach($this->store->summaries('contacts') as $con){
+                $prov=trim((string)($con['province']??''));
+                if($prov!==''){
+                    $det=Schema::detectProvince($prov);
+                    if($det!=='')$prov=$det;
+                } elseif(!empty($con['address'])){
+                    $prov=Schema::detectProvince((string)$con['address']);
+                }
+                $contacts[$con['id']]=[
+                    'name'=>(string)($con['name']??''),
+                    'phone'=>(string)($con['phone']??''),
+                    'province'=>$prov,
+                ];
+            }
+
+            $campaigns=[];
+            $campaignMap=[];
+            $activeGoalsSum=0;
+            foreach($this->store->summaries('campaigns') as $cam){
+                $cid=(string)$cam['id'];
+                $goal=(int)($cam['goal_satang']??0);
+                $st=(string)($cam['status']??'active');
+                $item=[
+                    'id'=>$cid,
+                    'name'=>(string)($cam['name']??$cid),
+                    'goal_satang'=>$goal,
+                    'status'=>$st,
+                ];
+                $campaignMap[$cid]=$item;
+                $campaigns[]=$item;
+                if($st==='active' && $goal>0)$activeGoalsSum+=$goal;
+            }
+            usort($campaigns,function($a,$b){
+                $pa=$a['status']==='active'?0:($a['status']==='draft'?1:2);
+                $pb=$b['status']==='active'?0:($b['status']==='draft'?1:2);
+                return $pa<=>$pb ?: strcmp($a['name'],$b['name']);
+            });
+
+            $distOptions=Schema::module('donations')['fields']['distribution_period']['options']??[];
+
+            $confirmedSatang=0;$todayConfirmedSatang=0;$confirmedCount=0;$todayConfirmedCount=0;
+            $pendingSatang=0;$pendingCount=0;
+            $donors=[];$provAgg=[];$confirmedList=[];
+
+            foreach($this->store->summaries('donations') as $d){
+                $cid=(string)($d['campaign_id']??'');
+                if($campaignId!=='all' && $cid!==$campaignId)continue;
+
+                $dDate=substr((string)(($d['donated_at']??'')!==''?$d['donated_at']:($d['created_at']??'')),0,10);
+                $isToday=($dDate===$todayLocal);
+                $st=(string)($d['status']??'');
+                $val=(int)($d['amount_satang']??0);
+
+                if($st==='confirmed' && $isToday){
+                    $todayConfirmedSatang+=$val;
+                    $todayConfirmedCount++;
+                }
+
+                if($scope==='today' && !$isToday)continue;
+
+                if($st==='pending'){
+                    $pendingCount++;
+                    $pendingSatang+=$val;
+                    continue;
+                }
+                if($st!=='confirmed')continue;
+
+                $confirmedSatang+=$val;
+                $confirmedCount++;
+                $conId=trim((string)($d['contact_id']??''));
+                $donorKey=$conId!==''?$conId:('anon_'.($d['id']??$confirmedCount));
+                $donors[$donorKey]=true;
+
+                $conInfo=$conId!==''?($contacts[$conId]??null):null;
+                $prov=(string)($conInfo['province']??'');
+                if($prov!==''){
+                    if(!isset($provAgg[$prov]))$provAgg[$prov]=['amount'=>0,'count'=>0,'donors'=>[]];
+                    $provAgg[$prov]['amount']+=$val;
+                    $provAgg[$prov]['count']++;
+                    $provAgg[$prov]['donors'][$donorKey]=true;
+                }
+
+                $confirmedList[]=[
+                    'raw'=>$d,
+                    'con'=>$conInfo,
+                    'cam_name'=>$campaignMap[$cid]['name']??'โครงการทั่วไป',
+                    'sort_ts'=>(string)(($d['updated_at']??'')!==''?$d['updated_at']:($d['created_at']??'')),
+                ];
+            }
+
+            usort($confirmedList,fn($x,$y)=>strcmp($y['sort_ts'],$x['sort_ts']));
+
+            $recentFeed=[];
+            foreach(array_slice($confirmedList,0,12) as $entry){
+                $d=$entry['raw'];
+                $con=$entry['con'];
+                $rawName=(string)($con['name']??'');
+                $rawPhone=(string)($con['phone']??'');
+                $prov=(string)($con['province']??'');
+                $distKey=(string)($d['distribution_period']??'once');
+                $distLabel=($distKey!==''&&$distKey!=='once')?($distOptions[$distKey]??''):'';
+
+                $timeText='';
+                $ts=(string)($entry['sort_ts']??'');
+                if($ts!==''){
+                    $unix=strtotime($ts);
+                    if($unix!==false)$timeText=date('H:i น.',$unix);
+                }
+
+                $recentFeed[]=[
+                    'id'=>(string)($d['id']??''),
+                    'donor_short'=>self::maskDonorName($rawName),
+                    'phone_masked'=>self::maskThaiPhone($rawPhone),
+                    'province'=>$prov,
+                    'campaign_name'=>$entry['cam_name'],
+                    'amount_satang'=>(int)($d['amount_satang']??0),
+                    'distribution_label'=>$distLabel,
+                    'donated_at'=>substr((string)($d['donated_at']??''),0,10),
+                    'time_label'=>$timeText,
+                ];
+            }
+
+            uasort($provAgg,fn($a,$b)=>$b['amount']<=>$a['amount'] ?: count($b['donors'])<=>count($a['donors']));
+            $topProvinces=[];
+            $provinceAmounts=[];
+            foreach($provAgg as $pName=>$agg){
+                $provinceAmounts[$pName]=$agg['amount'];
+                if(count($topProvinces)<12){
+                    $topProvinces[]=[
+                        'province'=>$pName,
+                        'amount_satang'=>$agg['amount'],
+                        'count'=>$agg['count'],
+                        'donor_count'=>count($agg['donors']),
+                        'share_pct'=>$confirmedSatang>0?round(($agg['amount']/$confirmedSatang)*100,1):0.0,
+                    ];
+                }
+            }
+
+            $selectedMeta=($campaignId!=='all' && isset($campaignMap[$campaignId]))
+                ?$campaignMap[$campaignId]
+                :['id'=>'all','name'=>'รวมทุกโครงการระดมทุน','goal_satang'=>$activeGoalsSum,'status'=>'active'];
+
+            $goal=(int)($selectedMeta['goal_satang']??0);
+            return [
+                'today_date'=>$todayLocal,
+                'campaigns'=>$campaigns,
+                'selected_campaign'=>$selectedMeta,
+                'scope'=>$scope,
+                'confirmed_satang'=>$confirmedSatang,
+                'confirmed_count'=>$confirmedCount,
+                'today_confirmed_satang'=>$todayConfirmedSatang,
+                'today_confirmed_count'=>$todayConfirmedCount,
+                'pending_satang'=>$pendingSatang,
+                'pending_count'=>$pendingCount,
+                'unique_donors'=>count($donors),
+                'avg_satang'=>$confirmedCount>0?(int)round($confirmedSatang/$confirmedCount):0,
+                'goal_satang'=>$goal,
+                'goal_pct'=>$goal>0?round(($confirmedSatang/$goal)*100,1):null,
+                'remaining_satang'=>$goal>0?max(0,$goal-$confirmedSatang):0,
+                'recent_feed'=>$recentFeed,
+                'top_provinces'=>$topProvinces,
+                'province_amounts'=>$provinceAmounts,
+            ];
+        });
+
+        $payload['server_time']=date('H:i:s');
+        crm_json($payload);
+    }
+    private function exportAnalytics(): never {
+        if(!$this->auth->can('reports')&&($this->auth->current()['role']??'')!=='admin'){
+            crm_json(['error'=>'Export requires reports permission'],403);
+        }
+        $type=(string)($_GET['type']??'receivers');
+        if(!in_array($type,['receivers','provinces','campaigns'],true)){
+            crm_json(['error'=>'Invalid analytics export type'],422);
+        }
+        $dateFrom=isset($_GET['date_from'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_from'])?(string)$_GET['date_from']:'';
+        $dateTo=isset($_GET['date_to'])&&preg_match('/^\d{4}-\d\d-\d\d$/',(string)$_GET['date_to'])?(string)$_GET['date_to']:'';
+        $stats=$this->computeAnalytics($dateFrom,$dateTo);
+        $filename='analytics_'.$type.($dateFrom?"_{$dateFrom}":'').($dateTo?"_to_{$dateTo}":'').'_'.gmdate('Ymd_His').'.csv';
+        header('Content-Type: text/csv; charset=utf-8');
+        header('Content-Disposition: attachment; filename="'.$filename.'"');
+        header('Cache-Control: no-store');
+        $out=fopen('php://output','w');
+        fwrite($out,"\xEF\xBB\xBF");
+        $safeCell=static function(mixed $v): string {
+            $s=(string)$v;
+            return preg_match('/^[\s]*[=+@\-]/u',$s)?"'".$s:$s;
+        };
+        if($type==='receivers'){
+            fputcsv($out,['อันดับ','ผู้รับแจ้งยอด / ช่องทาง','ประเภทช่องทาง','ยอดบริจาคยืนยัน (บาท)','จำนวนรายการ (บิล)','จำนวนผู้บริจาค (คน)','เฉลี่ยต่อรายการ (บาท)','สัดส่วน (%)']);
+            $kindLabels=['callcenter'=>'Call Center','person'=>'บุคคล','other'=>'อื่น ๆ','unassigned'=>'ไม่ระบุ'];
+            foreach($stats['by_receiver'] as $idx=>$r){
+                fputcsv($out,[
+                    $idx+1,
+                    $safeCell($r['name']),
+                    $kindLabels[$r['kind']]??$r['kind'],
+                    number_format($r['amount_satang']/100,2,'.',''),
+                    $r['count'],
+                    $r['donor_count'],
+                    number_format($r['avg_satang']/100,2,'.',''),
+                    number_format($r['share_pct'],1,'.',''),
+                ]);
+            }
+        } elseif($type==='provinces'){
+            fputcsv($out,['อันดับ','จังหวัด','ภูมิภาค','ยอดบริจาคยืนยัน (บาท)','จำนวนผู้บริจาค (คน)','จำนวนรายการ (บิล)','เฉลี่ยต่อรายการ (บาท)','สัดส่วน (%)']);
+            foreach($stats['by_province'] as $idx=>$p){
+                fputcsv($out,[
+                    $idx+1,
+                    $safeCell($p['province']),
+                    $safeCell($p['region_label']),
+                    number_format($p['amount_satang']/100,2,'.',''),
+                    $p['donor_count'],
+                    $p['count'],
+                    number_format($p['avg_satang']/100,2,'.',''),
+                    number_format($p['share_pct'],1,'.',''),
+                ]);
+            }
+        } else {
+            fputcsv($out,['อันดับ','ชื่อโครงการ','สถานะ','ยอดระดมทุนยืนยัน (บาท)','เป้าหมายโครงการ (บาท)','ความสำเร็จตามเป้าหมาย (%)','จำนวนรายการ (บิล)','สัดส่วนยอดรวม (%)']);
+            $stLabels=['active'=>'ดำเนินการ','closed'=>'ปิดโครงการ','draft'=>'ร่าง'];
+            foreach($stats['campaign_details'] as $idx=>$c){
+                fputcsv($out,[
+                    $idx+1,
+                    $safeCell($c['name']),
+                    $stLabels[$c['status']]??$c['status'],
+                    number_format($c['amount_satang']/100,2,'.',''),
+                    number_format($c['goal_satang']/100,2,'.',''),
+                    $c['goal_pct']!==null?number_format($c['goal_pct'],1,'.',''):'ไม่จำกัดเป้าหมาย',
+                    $c['count'],
+                    number_format($c['share_pct'],1,'.',''),
+                ]);
+            }
+        }
+        fclose($out);
+        exit;
     }
     private function export(): never {
         $module=(string)($_GET['module']??'');$schema=Schema::module($module);
@@ -1230,15 +1714,20 @@ final class Api {
         $totalRecords=0;
         foreach(array_keys(Schema::all()) as $m)$totalRecords+=$this->store->count($m);
         $sqliteVer=$this->store->pdo()->query('SELECT sqlite_version()')->fetchColumn();
-        $lastBackup=$this->store->read('settings','backup_meta');
+        $lastBackup=$this->store->read('settings','backup_meta')?:[];
         crm_json([
             'sqlite_version'=>(string)$sqliteVer,
+            'sodium_loaded'=>Backup::isEncryptionSupported(),
             'db_bytes'=>$dbBytes,
             'uploads_bytes'=>$uploadsBytes,
             'uploads_count'=>$uploadsCount,
             'total_records'=>$totalRecords,
             'last_backup_at'=>$lastBackup['last_backup_at']??null,
             'last_backup_by'=>$lastBackup['last_backup_by']??null,
+            'last_backup_format'=>$lastBackup['last_backup_format']??null,
+            'last_wcb_backup_at'=>$lastBackup['last_wcb_backup_at']??null,
+            'last_wcb_backup_by'=>$lastBackup['last_wcb_backup_by']??null,
+            'last_wcb_bytes'=>$lastBackup['last_wcb_bytes']??null,
         ]);
     }
     private function backupDownload(): never {
@@ -1247,8 +1736,19 @@ final class Api {
         $token=(string)($_GET['_csrf']??'');
         if(!hash_equals(crm_csrf(),$token))crm_json(['error'=>'Invalid CSRF token for backup download'],419);
         $format=(string)($_GET['format']??'sqlite');
+        $fmtKey=$format==='archive'?'tar':'sqlite';
         $now=crm_now();
-        $meta=['id'=>'backup_meta','version'=>1,'created_at'=>$now,'updated_at'=>$now,'deleted_at'=>null,'last_backup_at'=>$now,'last_backup_by'=>$me['name']??$me['username']??'Admin'];
+        $prevMeta=$this->store->read('settings','backup_meta')?:[];
+        $meta=array_merge($prevMeta,[
+            'id'=>'backup_meta',
+            'version'=>(int)($prevMeta['version']??0)+1,
+            'created_at'=>$prevMeta['created_at']??$now,
+            'updated_at'=>$now,
+            'deleted_at'=>null,
+            'last_backup_at'=>$now,
+            'last_backup_by'=>$me['name']??$me['username']??'Admin',
+            'last_backup_format'=>$fmtKey,
+        ]);
         $this->store->transact([
             ['collection'=>'settings','id'=>'backup_meta','record'=>$meta,'summary'=>$meta],
             $this->auditChange('settings','backup_meta','web_backup_'.$format)
@@ -1297,6 +1797,63 @@ final class Api {
             }
         } finally {
             @unlink($tmpSnap);
+        }
+        exit;
+    }
+    private function backupEncrypted(string $method): never {
+        if($method!=='POST')crm_json(['error'=>'Method not allowed'],405);
+        $me=$this->auth->current();
+        if(($me['role']??'')!=='admin')crm_json(['error'=>'เฉพาะผู้ดูแลระบบ (Admin) เท่านั้นที่สร้างไฟล์สำรองเข้ารหัส (.wcb) ได้'],403);
+        if(!Backup::isEncryptionSupported()){
+            crm_json(['error'=>'เซิร์ฟเวอร์ยังไม่เปิดใช้งานส่วนขยาย PHP sodium สำหรับเข้ารหัสไฟล์สำรอง (.wcb)'],500);
+        }
+        $body=crm_input();
+        $password=(string)($body['password']??'');
+        if(mb_strlen($password,'UTF-8')<12 || strlen($password)<12){
+            throw new InvalidArgumentException('กรุณาตั้งรหัสผ่านสำหรับเข้ารหัสไฟล์สำรองอย่างน้อย 12 ตัวอักษร');
+        }
+        $now=crm_now();
+        $actorName=$me['name']??$me['username']??'Admin';
+        $prevMeta=$this->store->read('settings','backup_meta')?:[];
+        $meta=array_merge($prevMeta,[
+            'id'=>'backup_meta',
+            'version'=>(int)($prevMeta['version']??0)+1,
+            'created_at'=>$prevMeta['created_at']??$now,
+            'updated_at'=>$now,
+            'deleted_at'=>null,
+            'last_backup_at'=>$now,
+            'last_backup_by'=>$actorName,
+            'last_backup_format'=>'wcb',
+            'last_wcb_backup_at'=>$now,
+            'last_wcb_backup_by'=>$actorName,
+        ]);
+        $this->store->transact([
+            ['collection'=>'settings','id'=>'backup_meta','record'=>$meta,'summary'=>$meta],
+            $this->auditChange('settings','backup_meta','web_backup_wcb')
+        ]);
+
+        $tmpWcb=sys_get_temp_dir().'/wc-crm-enc-'.bin2hex(random_bytes(8)).'.wcb';
+        try {
+            $bytes=Backup::createEncrypted($password,$tmpWcb,$this->store->pdo());
+            if(function_exists('sodium_memzero')){
+                sodium_memzero($password);
+            }
+            $meta['version']=(int)$meta['version']+1;
+            $meta['last_wcb_bytes']=$bytes;
+            $this->store->transact([
+                ['collection'=>'settings','id'=>'backup_meta','record'=>$meta,'summary'=>$meta],
+            ]);
+
+            $stamp=date('Ymd-His');
+            $filename='whitechannel-crm-backup-'.$stamp.'.wcb';
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="'.$filename.'"');
+            header('X-Backup-Filename: '.$filename);
+            header('Content-Length: '.$bytes);
+            header('Cache-Control: private, no-store');
+            readfile($tmpWcb);
+        } finally {
+            @unlink($tmpWcb);
         }
         exit;
     }
