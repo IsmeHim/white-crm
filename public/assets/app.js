@@ -37,8 +37,8 @@
     }).join('');
     return{html,totalSatang,totalCount,count:months.length};
   }
-  const icons = {dashboard:'◫',contacts:'♙',categories:'◇',campaigns:'▦',receivers:'☎',donations:'♥',hadeeya:'◈',stock_lots:'▤',inventory_moves:'⇄',delivery_companies:'▱',shipments:'▰',tasks:'☷',feedback:'☏',announcements:'◉',reports:'▥',users:'♟',audit:'◷',settings:'⚙'};
-  const groups = [ ['ภาพรวม',['dashboard','reports']], ['จัดการ CRM',['contacts','campaigns','categories','donations','receivers']], ['คลังและจัดส่ง',['hadeeya','stock_lots','inventory_moves','shipments','delivery_companies']], ['ติดตามและสื่อสาร',['tasks','feedback','announcements']], ['ตั้งค่าระบบ',['users','audit','settings']] ];
+  const icons = {dashboard:'◫',wallboard:'▣',contacts:'♙',categories:'◇',campaigns:'▦',receivers:'☎',donations:'♥',hadeeya:'◈',stock_lots:'▤',inventory_moves:'⇄',delivery_companies:'▱',shipments:'▰',tasks:'☷',feedback:'☏',announcements:'◉',reports:'▥',users:'♟',audit:'◷',settings:'⚙'};
+  const groups = [ ['ภาพรวม',['dashboard','wallboard','reports']], ['จัดการ CRM',['contacts','campaigns','categories','donations','receivers']], ['คลังและจัดส่ง',['hadeeya','stock_lots','inventory_moves','shipments','delivery_companies']], ['ติดตามและสื่อสาร',['tasks','feedback','announcements']], ['ตั้งค่าระบบ',['users','audit','settings']] ];
   const state={modules:{},roles:{},user:null,module:'dashboard',page:1,q:'',status:'',dateFrom:'',dateTo:'',datePreset:'all',options:{},optionItems:{},table:null};
   const thaiProvinces=['กระบี่','กาญจนบุรี','กาฬสินธุ์','กำแพงเพชร','ขอนแก่น','จันทบุรี','ฉะเชิงเทรา','ชลบุรี','ชัยนาท','ชัยภูมิ','ชุมพร','เชียงราย','เชียงใหม่','ตรัง','ตราด','ตาก','นครนายก','นครปฐม','นครพนม','นครราชสีมา','นครศรีธรรมราช','นครสวรรค์','นนทบุรี','นราธิวาส','น่าน','บึงกาฬ','บุรีรัมย์','ปทุมธานี','ประจวบคีรีขันธ์','ปราจีนบุรี','ปัตตานี','พระนครศรีอยุธยา','พะเยา','พังงา','พัทลุง','พิจิตร','พิษณุโลก','เพชรบุรี','เพชรบูรณ์','แพร่','ภูเก็ต','มหาสารคาม','มุกดาหาร','แม่ฮ่องสอน','ยโสธร','ยะลา','ร้อยเอ็ด','ระนอง','ระยอง','ราชบุรี','ลพบุรี','ลำปาง','ลำพูน','เลย','ศรีสะเกษ','สกลนคร','สงขลา','สตูล','สมุทรปราการ','สมุทรสงคราม','สมุทรสาคร','สระแก้ว','สระบุรี','สิงห์บุรี','สุโขทัย','สุพรรณบุรี','สุราษฎร์ธานี','สุรินทร์','หนองคาย','หนองบัวลำภู','อ่างทอง','อำนาจเจริญ','อุดรธานี','อุตรดิตถ์','อุทัยธานี','อุบลราชธานี'];
   function detectThaiProvince(text){
@@ -133,13 +133,13 @@
   }
   const roleAllows=(module,write=false)=>{
     const role=state.user?.role;if(role==='admin')return true;
-    const allow={manager:['dashboard','reports','contacts','campaigns','categories','donations','receivers','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','tasks','feedback','announcements'],finance:['dashboard','reports','contacts','campaigns','donations','receivers'],callcenter:['dashboard','contacts','campaigns','donations','receivers','tasks','feedback'],warehouse:['dashboard','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','donations'],auditor:['dashboard','reports','contacts','campaigns','categories','donations','receivers','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','tasks','feedback','announcements','audit'],viewer:['dashboard','announcements']};
+    const allow={manager:['dashboard','wallboard','reports','contacts','campaigns','categories','donations','receivers','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','tasks','feedback','announcements'],finance:['dashboard','wallboard','reports','contacts','campaigns','donations','receivers'],callcenter:['dashboard','wallboard','contacts','campaigns','donations','receivers','tasks','feedback'],warehouse:['dashboard','wallboard','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','donations'],auditor:['dashboard','wallboard','reports','contacts','campaigns','categories','donations','receivers','hadeeya','stock_lots','inventory_moves','shipments','delivery_companies','tasks','feedback','announcements','audit'],viewer:['dashboard','wallboard','announcements']};
     if(module==='settings')return true;
     if(!allow[role]?.includes(module))return false;
     if(write&&['viewer','auditor'].includes(role))return false;
     return true;
   };
-  const labelFor=m=>state.modules[m]?.label||({dashboard:'ภาพรวมระบบ',reports:'รายงานและสถิติ',users:'ผู้ใช้งานและสิทธิ์',audit:'ประวัติการทำงาน',settings:'ตั้งค่าส่วนตัว'}[m]||m);
+  const labelFor=m=>state.modules[m]?.label||({dashboard:'ภาพรวมระบบ',wallboard:'จอสดระดมทุน (LIVE)',reports:'รายงานและสถิติ',users:'ผู้ใช้งานและสิทธิ์',audit:'ประวัติการทำงาน',settings:'ตั้งค่าส่วนตัว'}[m]||m);
   function makeNav(){
     $('#nav-main').innerHTML=groups.map(([name,items])=>{
       const visible=items.filter(m=>roleAllows(m));
@@ -161,9 +161,17 @@
     state.module=module;state.page=1;state.q='';state.status='';state.dateFrom='';state.dateTo='';state.datePreset='all';state.options={};closeSidebar();
     if(!replace)history.pushState({module},'',`?module=${encodeURIComponent(module)}`);makeNav();render();
   }
+  let wbCleanupFn = null;
+  function stopWallboardTimers(){
+    if(typeof wbCleanupFn === 'function'){
+      try{wbCleanupFn();}catch(_){}
+      wbCleanupFn = null;
+    }
+  }
   async function render(){
+    stopWallboardTimers();
     const main=$('#page-content');main.innerHTML='<div class="loading-state">กำลังโหลดข้อมูล…</div>';
-    try{if(state.module==='dashboard')await dashboard();else if(state.module==='reports')await reports();else if(state.module==='users')await usersPage();else if(state.module==='audit')await auditPage();else if(state.module==='settings')await settingsPage();else if(state.modules[state.module])await recordsPage();else navigate('dashboard',true);}
+    try{if(state.module==='dashboard')await dashboard();else if(state.module==='wallboard')await wallboardPage();else if(state.module==='reports')await reports();else if(state.module==='users')await usersPage();else if(state.module==='audit')await auditPage();else if(state.module==='settings')await settingsPage();else if(state.modules[state.module])await recordsPage();else navigate('dashboard',true);}
     catch(err){main.innerHTML=`<div class="panel empty"><div class="empty-icon">⚠</div><h3>ไม่สามารถโหลดข้อมูล</h3><p>${esc(err.message)}</p><button class="btn" id="retry-page">ลองอีกครั้ง</button></div>`;$('#retry-page')?.addEventListener('click',render);}
   }
   async function dashboard(){
@@ -186,6 +194,777 @@
       };
     });
     $('[data-action="new-donation"]')?.addEventListener('click',()=>{navigate('donations');setTimeout(()=>openForm('donations'),120);});
+  }
+
+  // --- Live Fundraising TV Wallboard (Broadcast Studio Mode) ---
+  let wbSelectedCampaign = 'all';
+  let wbScope = 'all';
+  let wbAudioCtx = null;
+  function playBroadcastChime(){
+    try{
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if(!Ctx) return;
+      if(!wbAudioCtx) wbAudioCtx = new Ctx();
+      if(wbAudioCtx.state === 'suspended') wbAudioCtx.resume();
+      const now = wbAudioCtx.currentTime;
+      [[587.33, 0, 0.38], [880.0, 0.14, 0.65]].forEach(([freq, offset, dur]) => {
+        const osc = wbAudioCtx.createOscillator();
+        const gain = wbAudioCtx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(freq, now + offset);
+        gain.gain.setValueAtTime(0.001, now + offset);
+        gain.gain.exponentialRampToValueAtTime(0.18, now + offset + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + offset + dur);
+        osc.connect(gain);
+        gain.connect(wbAudioCtx.destination);
+        osc.start(now + offset);
+        osc.stop(now + offset + dur + 0.02);
+      });
+    }catch(_){}
+  }
+
+  async function wallboardPage(){
+    let soundOn = localStorage.getItem('wb-sound') !== '0';
+    let strictPrivacy = localStorage.getItem('wb-privacy') === '1';
+
+    const defaultWidgets = { hero:true, goal:true, kpis:true, map:true, ranking:true, feed:true, celebrate:true, cleanChrome:false };
+    let wbWidgets = { ...defaultWidgets };
+    try{
+      const saved = JSON.parse(localStorage.getItem('wb-widgets-v1') || 'null');
+      if(saved && typeof saved === 'object') wbWidgets = { ...defaultWidgets, ...saved };
+    }catch(_){}
+    const ensureAtLeastOneWidget = () => {
+      if(!wbWidgets.hero && !wbWidgets.goal && !wbWidgets.kpis && !wbWidgets.map && !wbWidgets.ranking && !wbWidgets.feed){
+        wbWidgets.ranking = true;
+      }
+    };
+    ensureAtLeastOneWidget();
+    const saveWidgets = () => localStorage.setItem('wb-widgets-v1', JSON.stringify(wbWidgets));
+
+    const scenePresets = {
+      all:     { hero:true,  goal:true,  kpis:true,  map:true,  ranking:true,  feed:true  },
+      hero:    { hero:true,  goal:true,  kpis:false, map:false, ranking:false, feed:false },
+      ranking: { hero:false, goal:false, kpis:false, map:false, ranking:true,  feed:false },
+      geo:     { hero:false, goal:false, kpis:false, map:true,  ranking:true,  feed:false },
+      feed:    { hero:false, goal:false, kpis:false, map:false, ranking:false, feed:true  }
+    };
+    const detectActivePreset = () => {
+      for(const [k, p] of Object.entries(scenePresets)){
+        if(p.hero===wbWidgets.hero && p.goal===wbWidgets.goal && p.kpis===wbWidgets.kpis && p.map===wbWidgets.map && p.ranking===wbWidgets.ranking && p.feed===wbWidgets.feed) return k;
+      }
+      return 'custom';
+    };
+
+    const [initialData, thGeo] = await Promise.all([
+      api('wallboard', { campaign_id: wbSelectedCampaign, scope: wbScope }),
+      loadThailandGeo().catch(() => null)
+    ]);
+
+    let currentData = initialData;
+    let displayedSatang = Number(initialData.confirmed_satang || 0);
+    let animFrame = null;
+    let seenIds = new Set((initialData.recent_feed || []).map(x => x.id));
+    let highlightedIds = new Set();
+    let pulseProvince = (initialData.recent_feed || []).find(x => x.province)?.province || (initialData.top_provinces?.[0]?.province || '');
+    let celebrateTimer = null;
+    let wakeLockSentinel = null;
+
+    const geoProvLookup = {};
+    if(thGeo?.provinces){ thGeo.provinces.forEach(gp => { geoProvLookup[gp.th] = gp; }); }
+
+    const box = $('#page-content');
+    box.innerHTML = `<div class="wb-shell ${wbWidgets.cleanChrome?'wb-clean-chrome':''}" id="wb-shell">
+      <button type="button" class="wb-floating-restore ${wbWidgets.cleanChrome?'':'hidden'}" id="wb-restore-chrome-btn" title="แสดงแถบตั้งค่าและปุ่มควบคุม">⚙ ตั้งค่าจอ LIVE</button>
+
+      <div class="wb-topbar">
+        <div class="wb-brand">
+          <span class="wb-live-pill"><i class="wb-live-dot"></i> LIVE FUNDRAISING</span>
+          <div>
+            <div class="wb-brand-title">WHITE CHANNEL · จอสดรายงานยอดระดมทุน</div>
+            <div class="wb-brand-sub">เลือกฉากออกจอทีวีสดได้อิสระ · อัปเดตอัตโนมัติทุก 5 วินาที</div>
+          </div>
+          <div class="wb-clock" id="wb-clock">--:--:-- น.</div>
+        </div>
+
+        <div class="wb-controls">
+          <select class="wb-select" id="wb-campaign-select" aria-label="เลือกโครงการที่แสดงบนจอทีวี"></select>
+          <div class="wb-toggle-group">
+            <button type="button" class="wb-scope-btn ${wbScope==='all'?'active':''}" data-wb-scope="all">ยอดสะสมโครงการ</button>
+            <button type="button" class="wb-scope-btn ${wbScope==='today'?'active':''}" data-wb-scope="today">ยอดเฉพาะวันนี้</button>
+          </div>
+          <button type="button" class="wb-ctrl-btn ${soundOn?'active':''}" id="wb-sound-btn" title="เปิด/ปิดเสียงกระดิ่งเมื่อมียอดบริจาคใหม่">${soundOn?'🔔 เสียงเปิด':'🔕 ปิดเสียง'}</button>
+          <button type="button" class="wb-ctrl-btn ${strictPrivacy?'active':''}" id="wb-privacy-btn" title="สลับโหมดซ่อนชื่อผู้บริจาคทั้งหมดบนหน้าจอ">${strictPrivacy?'👁 ซ่อนชื่อทั้งหมด':'👁 แสดงชื่อย่อ'}</button>
+          <button type="button" class="wb-ctrl-btn" id="wb-test-alert-btn" title="ทดสอบเสียงกระดิ่งและแบนเนอร์ฉลองยอดใหม่ก่อนออกอากาศ">✦ ทดสอบ</button>
+          <button type="button" class="wb-ctrl-btn fullscreen-btn" id="wb-fullscreen-btn">⛶ เต็มจอทีวี</button>
+        </div>
+      </div>
+
+      <div class="wb-scene-bar">
+        <div class="wb-scene-presets">
+          <span class="wb-scene-label">🎬 เลือกฉากออกจอ LIVE:</span>
+          <button type="button" class="wb-scene-pill" data-wb-preset="all">ครบทุกส่วน</button>
+          <button type="button" class="wb-scene-pill" data-wb-preset="hero">💰 ยอดรวม & เป้าหมาย</button>
+          <button type="button" class="wb-scene-pill" data-wb-preset="ranking">🏆 อันดับจังหวัดสูงสุด</button>
+          <button type="button" class="wb-scene-pill" data-wb-preset="geo">🗺️ แผนที่ + จังหวัด</button>
+          <button type="button" class="wb-scene-pill" data-wb-preset="feed">♥ รายการร่วมบุญล่าสุด</button>
+        </div>
+
+        <div class="wb-controls">
+          <button type="button" class="wb-ctrl-btn" id="wb-clean-chrome-btn" title="ซ่อนแถบเมนูด้านบนทั้งหมด เพื่อนำภาพเฉพาะส่วนที่เลือกขึ้นจอทีวีสดหรือ OBS">📺 ซ่อนแถบเมนู (ออกจอสด)</button>
+          <div class="wb-picker-wrap" id="wb-picker-wrap">
+            <button type="button" class="wb-ctrl-btn" id="wb-picker-btn">🎛 เลือกส่วนแสดงผลเอง ▾</button>
+            <div class="wb-widget-popover hidden" id="wb-widget-popover">
+              <div class="wb-popover-title"><span>เลือกส่วนที่ต้องการให้ออกจอ LIVE</span><small class="muted">เลือกผสมได้</small></div>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="hero"> <span>💰 ยอดบริจาคหลัก (ตัวเลขใหญ่)</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="goal"> <span>🎯 หลอดความคืบหน้าเป้าหมาย</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="kpis"> <span>📊 การ์ดสถิติย่อย 4 ช่อง</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="map"> <span>🗺️ แผนที่ประเทศไทย 77 จังหวัด</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="ranking"> <span>🏆 อันดับจังหวัดสูงสุด</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="feed"> <span>♥ รายการร่วมบริจาคล่าสุด</span></label>
+              <div class="wb-popover-divider"></div>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="celebrate"> <span>🎉 แบนเนอร์เด้งฉลองเมื่อยอดใหม่เข้า</span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="wb-celebrate-slot" class="hidden"></div>
+
+      <div class="wb-grid" id="wb-dynamic-grid"></div>
+    </div>`;
+
+    const shellEl = $('#wb-shell');
+    const clockEl = $('#wb-clock');
+    const campSelectEl = $('#wb-campaign-select');
+    const dynGridEl = $('#wb-dynamic-grid');
+
+    const updateClock = () => {
+      if(!clockEl) return;
+      const now = new Date();
+      const hh = String(now.getHours()).padStart(2, '0');
+      const mm = String(now.getMinutes()).padStart(2, '0');
+      const ss = String(now.getSeconds()).padStart(2, '0');
+      clockEl.textContent = `${hh}:${mm}:${ss} น.`;
+    };
+    updateClock();
+    const clockTimer = setInterval(updateClock, 1000);
+
+    const animateCounterTo = (targetSatang) => {
+      const heroAmtEl = $('#wb-hero-amount');
+      if(!heroAmtEl){
+        displayedSatang = targetSatang;
+        return;
+      }
+      if(animFrame) cancelAnimationFrame(animFrame);
+      const startVal = displayedSatang;
+      const diff = targetSatang - startVal;
+      if(diff === 0){
+        heroAmtEl.textContent = money(targetSatang);
+        return;
+      }
+      const startTime = performance.now();
+      const duration = 900;
+      const step = (ts) => {
+        const t = Math.min(1, (ts - startTime) / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        const cur = Math.round(startVal + diff * eased);
+        displayedSatang = cur;
+        if(heroAmtEl.isConnected) heroAmtEl.textContent = money(cur);
+        if(t < 1){
+          animFrame = requestAnimationFrame(step);
+        } else {
+          displayedSatang = targetSatang;
+          if(heroAmtEl.isConnected) heroAmtEl.textContent = money(targetSatang);
+        }
+      };
+      animFrame = requestAnimationFrame(step);
+    };
+
+    const showCelebration = (item) => {
+      if(!wbWidgets.celebrate) return;
+      const slot = $('#wb-celebrate-slot');
+      if(!slot || !item) return;
+      const who = strictPrivacy ? 'ผู้มีจิตศรัทธา' : (item.donor_short || 'ผู้มีจิตศรัทธา');
+      const provTxt = item.province ? ` (จ.${item.province})` : '';
+      slot.className = 'wb-celebrate';
+      slot.innerHTML = `<div class="wb-celebrate-main"><span>🎉 ยอดร่วมบุญใหม่!</span> <strong>${esc(who + provTxt)}</strong> <span>ร่วมบริจาคใน ${esc(item.campaign_name || '')}</span></div><span class="wb-celebrate-amt">+${esc(money(item.amount_satang))}</span>`;
+      if(celebrateTimer) clearTimeout(celebrateTimer);
+      celebrateTimer = setTimeout(() => { slot.className = 'hidden'; }, 7500);
+    };
+
+    const [baseMapX, baseMapY, baseMapW, baseMapH] = thGeo?.viewBox || [0, 0, 608, 1080];
+    let wbMapCam = { x: baseMapX, y: baseMapY, w: baseMapW, h: baseMapH };
+    let wbHoveredProv = '';
+
+    const buildMapSvgMarkup = (data, isTall = false) => {
+      if(!thGeo?.provinces?.length) return '<div class="muted mini">กำลังเตรียมแผนที่…</div>';
+      const provAmts = data.province_amounts || {};
+      const maxAmt = Math.max(1, ...Object.values(provAmts).map(v => Number(v) || 0));
+      const vb = isTall ? wbMapCam : { x: baseMapX, y: baseMapY, w: baseMapW, h: baseMapH };
+      const paths = thGeo.provinces.map(gp => {
+        const amt = Number(provAmts[gp.th] || 0);
+        let cls = '';
+        if(amt > 0){
+          const r = Math.sqrt(amt / maxAmt);
+          cls = r >= 0.8 ? 'w-h4' : r >= 0.55 ? 'w-h3' : r >= 0.3 ? 'w-h2' : 'w-h1';
+        }
+        return `<path class="wb-prov-path ${cls}" data-wb-prov="${esc(gp.th)}" d="${gp.d}"><title>จ.${esc(gp.th)} — ${amt > 0 ? money(amt) : '฿0.00'}</title></path>`;
+      }).join('');
+
+      const placedLbls = [];
+      const targetGp = pulseProvince ? geoProvLookup[pulseProvince] : null;
+      if(targetGp) placedLbls.push([targetGp.cx, targetGp.cy]);
+
+      const topPins = (data.top_provinces || []).slice(0, isTall ? 6 : 3).map(tp => {
+        if(tp.province === pulseProvince) return '';
+        const gp = geoProvLookup[tp.province];
+        if(!gp) return '';
+        const tooClose = placedLbls.some(([px, py]) => Math.abs(px - gp.cx) < 105 && Math.abs(py - gp.cy) < 38);
+        const showLbl = isTall && !tooClose;
+        if(showLbl) placedLbls.push([gp.cx, gp.cy]);
+        const lx = gp.cx >= 290 ? gp.cx + 12 : gp.cx - 12;
+        const anchor = gp.cx >= 290 ? 'start' : 'end';
+        return `<g>
+          <circle class="wb-top-pin-dot" cx="${gp.cx}" cy="${gp.cy}" r="6.5"></circle>
+          ${showLbl ? `<text class="wb-map-label" x="${lx}" y="${gp.cy + 6}" text-anchor="${anchor}">${esc(tp.province)}</text>` : ''}
+        </g>`;
+      }).join('');
+
+      let pulseSvg = '';
+      if(targetGp){
+        const lx = targetGp.cx >= 290 ? targetGp.cx + 15 : targetGp.cx - 15;
+        const anchor = targetGp.cx >= 290 ? 'start' : 'end';
+        pulseSvg = `<g>
+          <circle class="wb-pulse-ring" cx="${targetGp.cx}" cy="${targetGp.cy}" r="30"></circle>
+          <circle class="wb-pulse-dot" cx="${targetGp.cx}" cy="${targetGp.cy}" r="8.5"></circle>
+          <text class="wb-map-label pulse-lbl" x="${lx}" y="${targetGp.cy + 6}" text-anchor="${anchor}">${esc(pulseProvince)}</text>
+        </g>`;
+      }
+
+      const controlsHtml = isTall ? `<div class="wb-map-controls">
+          <button type="button" class="wb-map-zoom-btn" id="wb-map-zin" title="ซูมเข้า (+)">＋</button>
+          <button type="button" class="wb-map-zoom-btn" id="wb-map-zout" title="ซูมออก (−)">−</button>
+          <button type="button" class="wb-map-zoom-btn" id="wb-map-zreset" title="รีเซ็ตมุมมองแผนที่">⟲</button>
+        </div>` : '';
+
+      const inspectTarget = wbHoveredProv || pulseProvince || (data.top_provinces?.[0]?.province || '');
+      const inspectAmt = inspectTarget ? Number(provAmts[inspectTarget] || 0) : 0;
+      const hoverPillHtml = (isTall && inspectTarget)
+        ? `<div class="wb-map-hover-pill" id="wb-map-hover-pill"><span>📍 จังหวัด${esc(inspectTarget)}</span><strong>${esc(money(inspectAmt))}</strong></div>`
+        : '';
+
+      return `${controlsHtml}<svg class="wb-map-svg" id="wb-live-svg" viewBox="${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}" aria-hidden="true"><g>${paths}</g>${topPins}${pulseSvg}</svg>${hoverPillHtml}`;
+    };
+
+    const buildMapFooterHtml = (activeCnt) => `<div class="wb-map-footer">
+      <span>ร่วมบริจาคแล้ว <strong>${num(activeCnt)}</strong> จาก 77 จังหวัด</span>
+      <span class="wb-legend-scale">น้อย <i class="wb-swatch s0"></i><i class="wb-swatch s1"></i><i class="wb-swatch s2"></i><i class="wb-swatch s3"></i><i class="wb-swatch s4"></i> มาก</span>
+    </div>`;
+
+    const buildCompactRankingHtml = (data, limit = 5) => {
+      const tp = (data.top_provinces || []).slice(0, limit);
+      if(!tp.length) return '<div class="muted mini">ยังไม่มีข้อมูลจังหวัดในช่วงนี้</div>';
+      return tp.map((p, i) => {
+        const mCls = i === 0 ? 'm-1' : i === 1 ? 'm-2' : i === 2 ? 'm-3' : '';
+        return `<div class="wb-top-prov-row">
+          <div class="wb-top-prov-left">
+            <span class="wb-prov-medal ${mCls}">#${i + 1}</span>
+            <span class="wb-prov-name">จ.${esc(p.province)}</span>
+            <span class="wb-prov-donors">${num(p.donor_count)} ท่าน</span>
+          </div>
+          <strong>${esc(money(p.amount_satang))}</strong>
+        </div>`;
+      }).join('');
+    };
+
+    const buildExpandedRankingCard = (data, isSoloScreen) => {
+      const sel = data.selected_campaign || { name: 'รวมทุกโครงการระดมทุน' };
+      const tp = (data.top_provinces || []).slice(0, 10);
+      const maxP = Math.max(1, ...tp.map(x => Number(x.amount_satang) || 0));
+      const cardsHtml = tp.length ? `<div class="${isSoloScreen ? 'wb-solo-prov-grid' : 'wb-top-prov-list'}">${tp.map((p, i) => {
+        const mCls = i === 0 ? 'm-1' : i === 1 ? 'm-2' : i === 2 ? 'm-3' : '';
+        const pct = Math.min(100, Math.max(2, Math.round(((Number(p.amount_satang) || 0) / maxP) * 100)));
+        return `<div class="wb-solo-prov-card ${i === 0 ? 'podium-1' : ''}">
+          <div class="wb-solo-prov-top">
+            <div class="wb-solo-prov-name">
+              <span class="wb-prov-medal ${mCls}">#${i + 1}</span>
+              <span>จ.${esc(p.province)}</span>
+            </div>
+            <span class="wb-solo-prov-amt">${esc(money(p.amount_satang))}</span>
+          </div>
+          <div class="progress-line wb-prov-bar"><div class="w-pct-${pct}"></div></div>
+          <div class="wb-solo-prov-meta">
+            <span>ผู้บริจาค ${num(p.donor_count)} ท่าน · ${num(p.count)} รายการ</span>
+            <span>สัดส่วน ${p.share_pct}%</span>
+          </div>
+        </div>`;
+      }).join('')}</div>` : '<div class="empty">ยังไม่มีข้อมูลจังหวัดที่ร่วมบริจาคในช่วงเวลานี้</div>';
+
+      return `<section class="wb-card">
+        <div class="wb-ranking-solo-head">
+          <div>
+            <h2 class="wb-ranking-solo-title">🏆 อันดับจังหวัดที่ร่วมบริจาคสูงสุด</h2>
+            <div class="wb-ranking-solo-sub">${esc(sel.name)} · ${wbScope === 'today' ? `ยอดประจำวันที่ ${esc(data.today_date)}` : 'ยอดสะสมที่ยืนยันแล้ว'}</div>
+          </div>
+          ${!wbWidgets.hero ? `<div class="wb-ranking-solo-total"><span>ยอดบริจาครวม</span><strong>${esc(money(data.confirmed_satang || 0))}</strong></div>` : ''}
+        </div>
+        ${cardsHtml}
+      </section>`;
+    };
+
+    const syncControlsState = () => {
+      const activePreset = detectActivePreset();
+      shellEl.querySelectorAll('[data-wb-preset]').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.wbPreset === activePreset);
+      });
+      shellEl.querySelectorAll('[data-wb-wchk]').forEach(chk => {
+        const key = chk.dataset.wbWchk;
+        chk.checked = !!wbWidgets[key];
+      });
+      shellEl.classList.toggle('wb-clean-chrome', !!wbWidgets.cleanChrome);
+      $('#wb-restore-chrome-btn')?.classList.toggle('hidden', !wbWidgets.cleanChrome);
+    };
+
+    const renderWallboardData = (data, isInitial = false) => {
+      currentData = data;
+      syncControlsState();
+
+      if(campSelectEl){
+        const opts = [`<option value="all" ${wbSelectedCampaign==='all'?'selected':''}>★ รวมทุกโครงการระดมทุน</option>`]
+          .concat((data.campaigns || []).map(c => `<option value="${esc(c.id)}" ${wbSelectedCampaign===c.id?'selected':''}>${esc(c.name)}${c.status!=='active'?' (ปิดแล้ว)':''}</option>`));
+        campSelectEl.innerHTML = opts.join('');
+      }
+
+      if(!dynGridEl) return;
+
+      const sel = data.selected_campaign || { name: 'รวมทุกโครงการระดมทุน', goal_satang: 0 };
+      const hasHeroCard = wbWidgets.hero || wbWidgets.goal || wbWidgets.kpis;
+      // Split map & ranking into separate side-by-side cards if neither hero nor feed is shown!
+      const splitGeoCards = (!hasHeroCard && !wbWidgets.feed && wbWidgets.map && wbWidgets.ranking);
+
+      const panels = [];
+
+      // 1. Hero / Goal / KPIs Card
+      if(hasHeroCard){
+        let goalHtml = '';
+        if(wbWidgets.goal){
+          const goal = Number(data.goal_satang || 0);
+          const confirmed = Number(data.confirmed_satang || 0);
+          if(goal > 0){
+            const rawPct = data.goal_pct ?? Math.round((confirmed / goal) * 1000) / 10;
+            const clampPct = Math.min(100, Math.max(0, Math.round(confirmed / goal * 100)));
+            const reached = confirmed >= goal;
+            goalHtml = `<div class="wb-goal-section">
+              <div class="wb-goal-top">
+                <div class="wb-goal-pct">${num(rawPct)}% <small>ของเป้าหมายโครงการ</small></div>
+                <div class="wb-goal-target">เป้าหมาย ${esc(money(goal))}</div>
+              </div>
+              <div class="progress-line wb-mega-bar"><div class="w-pct-${clampPct}"></div></div>
+              <div class="wb-goal-foot">
+                <span>${reached ? 'อัลฮัมดุลิลลาฮ์ บรรลุเป้าหมายโครงการแล้ว' : `ยังขาดอีก ${money(data.remaining_satang || 0)} จะครบเป้าหมาย`}</span>
+                ${reached ? '<span class="wb-goal-badge">🎉 ทะลุเป้าหมาย 100%!</span>' : `<span>ยืนยันแล้ว ${num(data.confirmed_count || 0)} รายการ</span>`}
+              </div>
+            </div>`;
+          } else {
+            goalHtml = `<div class="wb-goal-section">
+              <div class="wb-goal-top">
+                <div class="wb-goal-pct">${num(data.confirmed_count || 0)} <small>รายการร่วมบริจาคที่ยืนยันแล้ว</small></div>
+                <div class="wb-goal-target">โครงการเปิดรับบริจาคไม่จำกัดเป้าหมาย</div>
+              </div>
+              <div class="progress-line wb-mega-bar"><div class="w-pct-100"></div></div>
+              <div class="wb-goal-foot"><span>ผู้ร่วมบุญสะสม ${num(data.unique_donors || 0)} ท่าน</span><span>เฉลี่ย ${money(data.avg_satang || 0)} ต่อรายการ</span></div>
+            </div>`;
+          }
+        }
+
+        const kpiHtml = wbWidgets.kpis ? `<div class="wb-kpi-grid">
+          <div class="wb-kpi-box">
+            <div class="wb-kpi-label">ยอดยืนยันวันนี้ (${esc(data.today_date)})</div>
+            <div class="wb-kpi-val gold">${esc(money(data.today_confirmed_satang || 0))}</div>
+            <div class="wb-kpi-sub">${num(data.today_confirmed_count || 0)} รายการในวันนี้</div>
+          </div>
+          <div class="wb-kpi-box">
+            <div class="wb-kpi-label">ผู้มีจิตศรัทธาร่วมบริจาค</div>
+            <div class="wb-kpi-val">${num(data.unique_donors || 0)} ท่าน</div>
+            <div class="wb-kpi-sub">จาก ${num(data.confirmed_count || 0)} บิลยืนยัน</div>
+          </div>
+          <div class="wb-kpi-box">
+            <div class="wb-kpi-label">ค่าเฉลี่ยต่อรายการ</div>
+            <div class="wb-kpi-val">${esc(money(data.avg_satang || 0))}</div>
+            <div class="wb-kpi-sub">คำนวณจากยอดที่ยืนยันแล้ว</div>
+          </div>
+          <div class="wb-kpi-box">
+            <div class="wb-kpi-label">คิวรอการเงินตรวจสอบ</div>
+            <div class="wb-kpi-val">${num(data.pending_count || 0)} รายการ</div>
+            <div class="wb-kpi-sub">มูลค่ารอตรวจ ${esc(money(data.pending_satang || 0))}</div>
+          </div>
+        </div>` : '';
+
+        panels.push(`<section class="wb-card wb-hero-card">
+          <div>
+            <div class="wb-camp-tag">${wbScope === 'today' ? `LIVE TODAY · ประจำวันที่ ${esc(data.today_date)}` : 'CAMPAIGN LIVE FUNDRAISING'}</div>
+            <h2 class="wb-camp-name">${esc(sel.name)}</h2>
+            ${wbWidgets.hero ? `<div class="wb-hero-amount-wrap">
+              <div class="wb-hero-caption">${wbScope === 'today' ? 'ยอดบริจาคที่ยืนยันแล้วเฉพาะวันนี้' : 'ยอดบริจาคสะสมที่ยืนยันแล้ว'}</div>
+              <div class="wb-hero-amount" id="wb-hero-amount">${esc(money(displayedSatang))}</div>
+            </div>` : ''}
+          </div>
+          ${goalHtml}
+          ${kpiHtml}
+        </section>`);
+      }
+
+      // 2. Map & Province Leaderboard Panels
+      const activeProvCnt = Object.keys(data.province_amounts || {}).length;
+      const pulseNote = pulseProvince ? `ล่าสุด: จ.${pulseProvince} · รวม ${num(activeProvCnt)} จังหวัด` : `ร่วมบุญแล้ว ${num(activeProvCnt)} จังหวัด`;
+
+      if(splitGeoCards){
+        panels.push(`<section class="wb-card wb-map-card">
+          <div class="wb-card-head"><h3>🗺️ แผนที่ผู้ร่วมบุญทั่วไทย (77 จังหวัด)</h3><small>${esc(pulseNote)}</small></div>
+          <div class="wb-map-box wb-map-tall" id="wb-tall-map-box">${buildMapSvgMarkup(data, true)}</div>
+          ${buildMapFooterHtml(activeProvCnt)}
+        </section>`);
+        panels.push(buildExpandedRankingCard(data, false));
+      } else if(wbWidgets.map && wbWidgets.ranking){
+        panels.push(`<section class="wb-card wb-map-card">
+          <div>
+            <div class="wb-card-head"><h3>🗺️ พื้นที่ผู้ร่วมบุญทั่วไทย</h3><small>${esc(pulseNote)}</small></div>
+            <div class="wb-map-box">${buildMapSvgMarkup(data, false)}</div>
+          </div>
+          <div>
+            <div class="wb-card-head"><h3>🏆 อันดับจังหวัดสูงสุด</h3></div>
+            <div class="wb-top-prov-list">${buildCompactRankingHtml(data, 5)}</div>
+          </div>
+        </section>`);
+      } else if(wbWidgets.map){
+        panels.push(`<section class="wb-card wb-map-card">
+          <div class="wb-card-head"><h3>🗺️ แผนที่ผู้ร่วมบุญทั่วไทย (77 จังหวัด)</h3><small>${esc(pulseNote)}</small></div>
+          <div class="wb-map-box wb-map-tall" id="wb-tall-map-box">${buildMapSvgMarkup(data, true)}</div>
+          ${buildMapFooterHtml(activeProvCnt)}
+        </section>`);
+      } else if(wbWidgets.ranking){
+        const isSoloRanking = !hasHeroCard && !wbWidgets.feed;
+        panels.push(buildExpandedRankingCard(data, isSoloRanking));
+      }
+
+      // 3. Live Feed Panel
+      if(wbWidgets.feed){
+        const isSoloFeed = panels.length === 0;
+        const items = data.recent_feed || [];
+        const feedHtml = items.length ? items.map(item => {
+          const isNew = highlightedIds.has(item.id);
+          const who = strictPrivacy
+            ? `ผู้มีจิตศรัทธา${item.phone_masked ? ' (' + item.phone_masked + ')' : ''}`
+            : item.donor_short;
+          return `<div class="wb-feed-item ${isNew ? 'is-new' : ''}">
+            <div class="wb-feed-left">
+              <div class="wb-feed-donor">
+                <span>${esc(who)}</span>
+                ${item.province ? `<span class="wb-feed-prov">จ.${esc(item.province)}</span>` : ''}
+                ${item.distribution_label ? `<span class="wb-feed-dist">${esc(item.distribution_label)}</span>` : ''}
+              </div>
+              <div class="wb-feed-sub">${esc(item.campaign_name)}${!strictPrivacy && item.phone_masked ? ` · ${esc(item.phone_masked)}` : ''}</div>
+            </div>
+            <div class="wb-feed-right">
+              <strong class="wb-feed-amt">+${esc(money(item.amount_satang))}</strong>
+              <span class="wb-feed-time">${esc(item.time_label || item.donated_at || '')}</span>
+            </div>
+          </div>`;
+        }).join('') : '<div class="empty">ยังไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้</div>';
+
+        panels.push(`<section class="wb-card">
+          <div class="wb-card-head">
+            <h3>♥ รายการร่วมบริจาคล่าสุด${isSoloFeed ? ` · ${esc(sel.name)}` : ''}</h3>
+            <small>อัปเดตล่าสุด ${esc(data.server_time || '')} น.</small>
+          </div>
+          <div class="wb-feed-list ${isSoloFeed ? 'wb-feed-solo' : ''}">${feedHtml}</div>
+        </section>`);
+      }
+
+      const colCount = Math.min(3, Math.max(1, panels.length));
+      dynGridEl.className = `wb-grid cols-${colCount}`;
+      dynGridEl.innerHTML = panels.join('');
+
+      // Wire interactive zoom/pan/hover on tall map panel
+      const tallBox = $('#wb-tall-map-box');
+      const liveSvg = $('#wb-live-svg');
+      if(tallBox && liveSvg){
+        const applyWbCam = () => {
+          wbMapCam.w = Math.max(baseMapW / 8, Math.min(baseMapW, wbMapCam.w));
+          wbMapCam.h = wbMapCam.w * (baseMapH / baseMapW);
+          wbMapCam.x = Math.max(baseMapX - wbMapCam.w * 0.25, Math.min(baseMapX + baseMapW - wbMapCam.w * 0.75, wbMapCam.x));
+          wbMapCam.y = Math.max(baseMapY - wbMapCam.h * 0.25, Math.min(baseMapY + baseMapH - wbMapCam.h * 0.75, wbMapCam.y));
+          liveSvg.setAttribute('viewBox', `${wbMapCam.x.toFixed(1)} ${wbMapCam.y.toFixed(1)} ${wbMapCam.w.toFixed(1)} ${wbMapCam.h.toFixed(1)}`);
+        };
+        const zoomWb = (factor, ax = wbMapCam.x + wbMapCam.w / 2, ay = wbMapCam.y + wbMapCam.h / 2) => {
+          const nw = Math.max(baseMapW / 8, Math.min(baseMapW, wbMapCam.w * factor));
+          const nh = nw * (baseMapH / baseMapW);
+          const rx = (ax - wbMapCam.x) / wbMapCam.w;
+          const ry = (ay - wbMapCam.y) / wbMapCam.h;
+          wbMapCam.w = nw; wbMapCam.h = nh;
+          wbMapCam.x = ax - rx * nw; wbMapCam.y = ay - ry * nh;
+          applyWbCam();
+        };
+        $('#wb-map-zin')?.addEventListener('click', () => zoomWb(0.72));
+        $('#wb-map-zout')?.addEventListener('click', () => zoomWb(1.38));
+        $('#wb-map-zreset')?.addEventListener('click', () => {
+          wbMapCam = { x: baseMapX, y: baseMapY, w: baseMapW, h: baseMapH };
+          applyWbCam();
+        });
+        tallBox.addEventListener('wheel', e => {
+          e.preventDefault();
+          const rect = liveSvg.getBoundingClientRect();
+          const px = (e.clientX - rect.left) / Math.max(1, rect.width);
+          const py = (e.clientY - rect.top) / Math.max(1, rect.height);
+          zoomWb(e.deltaY < 0 ? 0.8 : 1.25, wbMapCam.x + px * wbMapCam.w, wbMapCam.y + py * wbMapCam.h);
+        }, { passive: false });
+
+        let drag = null;
+        tallBox.addEventListener('pointerdown', e => {
+          if(e.target.closest('.wb-map-controls') || e.button !== 0) return;
+          drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, cx: wbMapCam.x, cy: wbMapCam.y, cap: false };
+        });
+        tallBox.addEventListener('pointermove', e => {
+          if(!drag || e.pointerId !== drag.id) return;
+          const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+          if(!drag.cap && (Math.abs(dx) > 4 || Math.abs(dy) > 4)){
+            drag.cap = true;
+            tallBox.classList.add('dragging');
+            try{ tallBox.setPointerCapture(e.pointerId); }catch(_){}
+          }
+          if(!drag.cap) return;
+          const rect = liveSvg.getBoundingClientRect();
+          wbMapCam.x = drag.cx - (dx / Math.max(1, rect.width)) * wbMapCam.w;
+          wbMapCam.y = drag.cy - (dy / Math.max(1, rect.height)) * wbMapCam.h;
+          applyWbCam();
+        });
+        const stopDrag = e => {
+          if(drag?.cap){ try{ tallBox.releasePointerCapture(e.pointerId); }catch(_){} }
+          drag = null;
+          tallBox.classList.remove('dragging');
+        };
+        tallBox.addEventListener('pointerup', stopDrag);
+        tallBox.addEventListener('pointercancel', stopDrag);
+
+        const hoverPill = $('#wb-map-hover-pill');
+        tallBox.querySelectorAll('[data-wb-prov]').forEach(pEl => {
+          pEl.addEventListener('mouseenter', () => {
+            wbHoveredProv = pEl.dataset.wbProv;
+            if(hoverPill){
+              const amt = Number((data.province_amounts || {})[wbHoveredProv] || 0);
+              hoverPill.innerHTML = `<span>📍 จังหวัด${esc(wbHoveredProv)}</span><strong>${esc(money(amt))}</strong>`;
+            }
+          });
+        });
+      }
+
+      if(isInitial){
+        displayedSatang = Number(data.confirmed_satang || 0);
+        const heroAmtEl = $('#wb-hero-amount');
+        if(heroAmtEl) heroAmtEl.textContent = money(displayedSatang);
+      } else {
+        animateCounterTo(Number(data.confirmed_satang || 0));
+      }
+    };
+
+    renderWallboardData(initialData, true);
+
+    // Poll every 5 seconds when visible
+    let pollBusy = false;
+    const pollNow = async (resetSeen = false) => {
+      if(pollBusy || document.hidden) return;
+      pollBusy = true;
+      try{
+        const next = await api('wallboard', { campaign_id: wbSelectedCampaign, scope: wbScope });
+        if(!shellEl.isConnected) return;
+        if(resetSeen){
+          seenIds = new Set((next.recent_feed || []).map(x => x.id));
+          highlightedIds.clear();
+          pulseProvince = (next.recent_feed || []).find(x => x.province)?.province || (next.top_provinces?.[0]?.province || '');
+          renderWallboardData(next, true);
+        } else {
+          const freshItems = (next.recent_feed || []).filter(x => x.id && !seenIds.has(x.id));
+          if(freshItems.length > 0){
+            freshItems.forEach(x => {
+              seenIds.add(x.id);
+              highlightedIds.add(x.id);
+            });
+            const newest = freshItems[0];
+            if(newest.province) pulseProvince = newest.province;
+            if(soundOn) playBroadcastChime();
+            showCelebration(newest);
+          }
+          renderWallboardData(next, false);
+        }
+      }catch(_){}
+      finally{ pollBusy = false; }
+    };
+
+    const pollTimer = setInterval(() => pollNow(false), 5000);
+    const onVisChange = () => { if(!document.hidden) pollNow(false); };
+    document.addEventListener('visibilitychange', onVisChange);
+
+    // Scene Presets & Custom Widget Popover Wiring
+    shellEl.querySelectorAll('[data-wb-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const p = scenePresets[btn.dataset.wbPreset];
+        if(!p) return;
+        wbWidgets = { ...wbWidgets, ...p };
+        saveWidgets();
+        renderWallboardData(currentData, true);
+      });
+    });
+
+    const pickerBtn = $('#wb-picker-btn');
+    const popoverEl = $('#wb-widget-popover');
+    pickerBtn?.addEventListener('click', e => {
+      e.stopPropagation();
+      popoverEl?.classList.toggle('hidden');
+    });
+    const onDocClick = e => {
+      if(popoverEl && !popoverEl.classList.contains('hidden') && !e.target.closest('#wb-picker-wrap')){
+        popoverEl.classList.add('hidden');
+      }
+    };
+    document.addEventListener('click', onDocClick);
+
+    shellEl.querySelectorAll('[data-wb-wchk]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const key = chk.dataset.wbWchk;
+        wbWidgets[key] = chk.checked;
+        if(!wbWidgets.hero && !wbWidgets.goal && !wbWidgets.kpis && !wbWidgets.map && !wbWidgets.ranking && !wbWidgets.feed){
+          wbWidgets[key] = true;
+          chk.checked = true;
+          toast('ต้องเปิดแสดงผลอย่างน้อย 1 ส่วนบนหน้าจอ LIVE', true);
+          return;
+        }
+        saveWidgets();
+        renderWallboardData(currentData, true);
+      });
+    });
+
+    $('#wb-clean-chrome-btn')?.addEventListener('click', () => {
+      wbWidgets.cleanChrome = true;
+      saveWidgets();
+      syncControlsState();
+      toast('ซ่อนแถบเมนูแล้ว (เลื่อนเมาส์ไปมุมขวาบนแล้วกด "⚙ ตั้งค่าจอ LIVE" เพื่อเปิดแถบเมนูกลับ)');
+    });
+    $('#wb-restore-chrome-btn')?.addEventListener('click', () => {
+      wbWidgets.cleanChrome = false;
+      saveWidgets();
+      syncControlsState();
+    });
+
+    // Controls wiring
+    campSelectEl?.addEventListener('change', e => {
+      wbSelectedCampaign = e.target.value;
+      pollNow(true);
+    });
+
+    shellEl.querySelectorAll('[data-wb-scope]').forEach(b => {
+      b.onclick = () => {
+        wbScope = b.dataset.wbScope;
+        shellEl.querySelectorAll('[data-wb-scope]').forEach(x => x.classList.toggle('active', x.dataset.wbScope === wbScope));
+        pollNow(true);
+      };
+    });
+
+    const soundBtn = $('#wb-sound-btn');
+    soundBtn?.addEventListener('click', () => {
+      soundOn = !soundOn;
+      localStorage.setItem('wb-sound', soundOn ? '1' : '0');
+      soundBtn.classList.toggle('active', soundOn);
+      soundBtn.textContent = soundOn ? '🔔 เสียงเปิด' : '🔕 ปิดเสียง';
+      if(soundOn) playBroadcastChime();
+    });
+
+    const privBtn = $('#wb-privacy-btn');
+    privBtn?.addEventListener('click', () => {
+      strictPrivacy = !strictPrivacy;
+      localStorage.setItem('wb-privacy', strictPrivacy ? '1' : '0');
+      privBtn.classList.toggle('active', strictPrivacy);
+      privBtn.textContent = strictPrivacy ? '👁 ซ่อนชื่อทั้งหมด' : '👁 แสดงชื่อย่อ';
+      renderWallboardData(currentData, true);
+    });
+
+    $('#wb-test-alert-btn')?.addEventListener('click', () => {
+      if(soundOn) playBroadcastChime();
+      const sample = currentData.recent_feed?.[0] || {
+        donor_short: 'คุณอับดุลเลาะห์ มี.',
+        province: 'ปัตตานี',
+        campaign_name: currentData.selected_campaign?.name || 'โครงการระดมทุน',
+        amount_satang: 100000
+      };
+      if(sample.province) pulseProvince = sample.province;
+      showCelebration(sample);
+      renderWallboardData(currentData, true);
+    });
+
+    // Fullscreen + Screen Wake Lock + Idle Control Dimming
+    let idleTimer = null;
+    const bumpActivity = () => {
+      shellEl.classList.remove('wb-idle-controls');
+      if(idleTimer) clearTimeout(idleTimer);
+      const isFs = document.fullscreenElement === shellEl || shellEl.classList.contains('wb-fixed-fullscreen') || wbWidgets.cleanChrome;
+      if(isFs){
+        idleTimer = setTimeout(() => shellEl.classList.add('wb-idle-controls'), 4000);
+      }
+    };
+    shellEl.addEventListener('mousemove', bumpActivity);
+
+    const requestWakeLock = async () => {
+      try{
+        if('wakeLock' in navigator && !wakeLockSentinel){
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+        }
+      }catch(_){}
+    };
+    requestWakeLock();
+
+    const fsBtn = $('#wb-fullscreen-btn');
+    const syncFsButton = () => {
+      const isFs = document.fullscreenElement === shellEl || shellEl.classList.contains('wb-fixed-fullscreen');
+      if(fsBtn) fsBtn.textContent = isFs ? '✕ ออกจากเต็มจอ' : '⛶ เต็มจอทีวี';
+      if(!isFs && !wbWidgets.cleanChrome) shellEl.classList.remove('wb-idle-controls');
+      else bumpActivity();
+    };
+    document.addEventListener('fullscreenchange', syncFsButton);
+
+    fsBtn?.addEventListener('click', async () => {
+      const isNativeFs = document.fullscreenElement === shellEl;
+      const isCssFs = shellEl.classList.contains('wb-fixed-fullscreen');
+      if(isNativeFs){
+        await document.exitFullscreen().catch(() => {});
+      } else if(isCssFs){
+        shellEl.classList.remove('wb-fixed-fullscreen');
+        syncFsButton();
+      } else if(shellEl.requestFullscreen){
+        try{
+          await shellEl.requestFullscreen();
+        }catch(_){
+          shellEl.classList.add('wb-fixed-fullscreen');
+          syncFsButton();
+        }
+      } else {
+        shellEl.classList.add('wb-fixed-fullscreen');
+        syncFsButton();
+      }
+    });
+
+    wbCleanupFn = () => {
+      clearInterval(clockTimer);
+      clearInterval(pollTimer);
+      if(celebrateTimer) clearTimeout(celebrateTimer);
+      if(idleTimer) clearTimeout(idleTimer);
+      if(animFrame) cancelAnimationFrame(animFrame);
+      document.removeEventListener('visibilitychange', onVisChange);
+      document.removeEventListener('fullscreenchange', syncFsButton);
+      document.removeEventListener('click', onDocClick);
+      if(wakeLockSentinel){
+        wakeLockSentinel.release().catch(() => {});
+        wakeLockSentinel = null;
+      }
+    };
   }
   async function optionNames(module){
     if(state.options[module])return state.options[module];
@@ -1612,35 +2391,501 @@
     const r=await api('options',{module:'stock_lots'});modal('บันทึกเคลื่อนไหวสต็อก',`<form id="movement-form" class="stack"><div class="form-grid"><label class="form-field"><span class="field-title">ล็อตสินค้า <span class="req-star">*</span></span><select name="lot_id" required><option value="">— เลือกล็อตสินค้าฮาดียะห์ —</option>${r.items.map(x=>`<option value="${esc(x.id)}" ${lotId===x.id?'selected':''}>${esc(x.name)}</option>`).join('')}</select></label><label class="form-field"><span class="field-title">ประเภทการเคลื่อนไหว <span class="req-star">*</span></span><select name="type"><option value="receive">รับเข้า (+)</option><option value="issue">จ่ายออก (-)</option><option value="adjust">ปรับยอดคงเหลือ (=)</option></select></label><label class="form-field"><span class="field-title">จำนวน (ชิ้น) <span class="req-star">*</span></span><input type="number" name="quantity" required min="0" step="1" value="1" placeholder="ระบุจำนวนชิ้น เช่น 10"></label><label class="form-field field-full"><span class="field-title">เหตุผล / เลขเอกสารอ้างอิง <span class="req-star">*</span></span><input name="reason" maxlength="1000" required placeholder="เช่น รับของเข้าจากโรงพิมพ์ล็อตใหม่ หรือ เบิกจัดส่งผู้บริจาค"></label></div><p class="secondary-note">การบันทึกจะเปลี่ยนยอดล็อตและสร้างประวัติแบบตรวจสอบย้อนหลังได้พร้อมกัน</p><div class="form-actions"><button class="btn" type="button" id="cancel-modal">ยกเลิก</button><button class="btn primary" type="submit">บันทึก</button></div></form>`);
     $('#cancel-modal').onclick=closeModal;$('#movement-form').onsubmit=async e=>{e.preventDefault();try{await api('inventory',{},'POST',formData(e.target));delete state.options.stock_lots;closeModal();toast('อัปเดตสต็อกสำเร็จ');render();}catch(err){toast(err.message,true);}};
   }
+  let cachedThailandGeo = null;
+  async function loadThailandGeo(){
+    if(cachedThailandGeo) return cachedThailandGeo;
+    const res = await fetch('assets/thailand-map.json', {credentials:'same-origin'});
+    if(!res.ok) throw new Error('ไม่สามารถโหลดข้อมูลพิกัดแผนที่ประเทศไทยได้');
+    cachedThailandGeo = await res.json();
+    return cachedThailandGeo;
+  }
+  const regionLabelLookup = {
+    south:'ภาคใต้', bkk_metro:'กรุงเทพฯ และปริมณฑล', central:'ภาคกลาง',
+    northeast:'ภาคตะวันออกเฉียงเหนือ', north:'ภาคเหนือ', east:'ภาคตะวันออก', west:'ภาคตะวันตก', unknown:'ไม่ระบุจังหวัด'
+  };
+  let repCampaignMode = 'share';
+  let repProvinceSort = 'amount';
+  let repRegionFilter = 'all';
+
   async function reports(){
-    const a=await api('summary',{...(state.dateFrom?{date_from:state.dateFrom}:{}),...(state.dateTo?{date_to:state.dateTo}:{})});
-    const c=a.counts;
+    const [a, thGeo] = await Promise.all([
+      api('summary',{...(state.dateFrom?{date_from:state.dateFrom}:{}),...(state.dateTo?{date_to:state.dateTo}:{})}),
+      loadThailandGeo().catch(()=>null)
+    ]);
+    const c=a.counts||{};
     const periodNote=(state.dateFrom||state.dateTo)?`ช่วงวันที่ ${state.dateFrom||'เริ่มต้น'} ถึง ${state.dateTo||'ปัจจุบัน'}`:'ข้อมูลสะสมทุกช่วงเวลา';
+    const activeProvinces=(a.by_province||[]).filter(p=>p.province&&p.province!=='ไม่ระบุจังหวัด');
+    const activeRegions=(a.by_region||[]).filter(r=>r.region!=='unknown'&&(Number(r.amount_satang)||0)>0);
     const stats=[
-      ['ยอดบริจาคยืนยันแล้ว',money(a.confirmed_satang),'donations',periodNote],
-      ['ยอดบริจาครอตรวจสอบ',money(a.pending_satang||0),'donations','รายการสถานะรอตรวจสอบ'],
-      ['จำนวนรายการบริจาค',num(a.period_donations_count??c.donations),'donations',periodNote],
-      ['ผู้บริจาค / สมาชิกทั้งหมด',num(c.contacts),'contacts','ฐานข้อมูลสมาชิกในระบบ']
+      ['ยอดบริจาคยืนยันแล้ว',money(a.confirmed_satang),'donations',`${num(a.confirmed_count||0)} บิลยืนยัน · เฉลี่ย ${money(a.avg_donation_satang||0)}/บิล`],
+      ['ยอดบริจาครอตรวจสอบ',money(a.pending_satang||0),'donations',`${num(a.donation_status?.pending||0)} รายการรอตรวจสอบ`],
+      ['ผู้บริจาคที่ร่วมบริจาค',`${num(a.unique_donors_count||0)} คน`,'contacts',`จากฐานสมาชิกทั้งหมด ${num(c.contacts||0)} คน`],
+      ['พื้นที่ผู้บริจาคทั่วประเทศ',`${num(activeProvinces.length)} จังหวัด`,'campaigns',`ครอบคลุม ${num(activeRegions.length)} ภูมิภาค`]
     ];
     const trend=buildTrendChart(a.by_month, a.by_month_counts||{}, 'ไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้', currentChartMode);
-    let campaigns=Object.entries(a.by_campaign||{});const campaignNames=await optionNames('campaigns').catch(()=>({}));const max=Math.max(1,...campaigns.map(x=>x[1]));
-    const campCounts=a.by_campaign_counts||{};
+    const campDetails=Array.isArray(a.campaign_details)?a.campaign_details:[];
+    const provinces=Array.isArray(a.by_province)?a.by_province:[];
+    const regions=Array.isArray(a.by_region)?a.by_region:[];
+
+    const provDataMap={};
+    provinces.forEach(p=>{provDataMap[p.province]=p;});
+    const geoProvMap={};
+    if(thGeo?.provinces){thGeo.provinces.forEach(gp=>{geoProvMap[gp.th]=gp;});}
+
+    const renderCampaignList=(mode)=>{
+      if(!campDetails.length)return '<div class="empty">ไม่มีข้อมูลโครงการในช่วงเวลานี้</div>';
+      const maxAmt=Math.max(1,...campDetails.map(x=>Number(x.amount_satang)||0));
+      return `<div class="rank-list">${campDetails.slice(0,10).map((cam,idx)=>{
+        const amt=Number(cam.amount_satang)||0;
+        const goal=Number(cam.goal_satang)||0;
+        const hasGoal=goal>0;
+        const goalPct=hasGoal?Math.round((amt/goal)*100):0;
+        const barPct=mode==='goal'
+          ?(hasGoal?Math.min(100,Math.max(0,goalPct)):Math.min(100,Math.max(0,Math.round((amt/maxAmt)*100))))
+          :Math.min(100,Math.max(0,Math.round((amt/maxAmt)*100)));
+        const rankCls=idx===0?'top-1':idx===1?'top-2':idx===2?'top-3':'';
+        const overGoal=mode==='goal'&&hasGoal&&goalPct>=100;
+        const metaRight=mode==='goal'
+          ?(hasGoal?`เป้าหมาย ${money(goal)} (${num(goalPct)}%)`:'ไม่จำกัดเป้าหมาย')
+          :`${num(cam.count||0)} รายการ · สัดส่วน ${cam.share_pct||0}%`;
+        return `<div class="rank-card">
+          <div class="rank-row-top">
+            <div class="rank-left">
+              <span class="rank-num ${rankCls}">${idx+1}</span>
+              <div class="rank-title-wrap">
+                <div class="rank-title">${esc(cam.name)} ${hasGoal&&goalPct>=100?'<span class="pill green">ทะลุเป้าหมาย</span>':''}</div>
+                <div class="rank-meta"><span>${num(cam.count||0)} บิลยืนยัน</span><span>·</span><span>${esc(metaRight)}</span></div>
+              </div>
+            </div>
+            <div class="rank-right">
+              <strong class="rank-amount">${money(amt)}</strong>
+              <span class="rank-share">${mode==='goal'&&hasGoal?`${num(goalPct)}% ของเป้า`:`${cam.share_pct||0}% ของยอดรวม`}</span>
+            </div>
+          </div>
+          <div class="progress-line compact"><div class="w-pct-${barPct} ${overGoal?'goal-over':''}"></div></div>
+        </div>`;
+      }).join('')}</div>`;
+    };
+
+    const regionMapMeta={};
+    regions.forEach(r=>{regionMapMeta[r.region]=r;});
+    const maxProvAmt=Math.max(1,...activeProvinces.map(p=>Number(p.amount_satang)||0));
+    const provHeatClass=(provName)=>{
+      const amt=Number(provDataMap[provName]?.amount_satang||0);
+      if(amt<=0)return 'heat-0';
+      const norm=Math.sqrt(amt/maxProvAmt);
+      if(norm>=0.82)return 'heat-4';
+      if(norm>=0.56)return 'heat-3';
+      if(norm>=0.32)return 'heat-2';
+      return 'heat-1';
+    };
+
+    const buildRealThailandMapSvg=()=>{
+      if(!thGeo?.provinces?.length){
+        return '<div class="empty">ไม่พบข้อมูลแผนที่จังหวัด</div>';
+      }
+      const [vx,vy,vw,vh]=thGeo.viewBox||[0,0,608,1080];
+      const pathsHtml=thGeo.provinces.map(gp=>{
+        const pStat=provDataMap[gp.th];
+        const hCls=provHeatClass(gp.th);
+        const dimCls=(repRegionFilter!=='all'&&gp.reg!==repRegionFilter)?'dimmed':'';
+        const tip=pStat
+          ?`${gp.th} (${regionLabelLookup[gp.reg]||''}) — ยอด ${money(pStat.amount_satang)} | ผู้บริจาค ${num(pStat.donor_count)} คน (${num(pStat.count)} บิล)`
+          :`${gp.th} (${regionLabelLookup[gp.reg]||''}) — ยังไม่มีรายการบริจาคในช่วงเวลานี้`;
+        return `<path class="th-prov-path ${hCls} ${dimCls}" data-prov-poly="${esc(gp.th)}" data-prov-reg="${esc(gp.reg)}" d="${gp.d}"><title>${esc(tip)}</title></path>`;
+      }).join('');
+
+      // Place proportional markers + non-overlapping labels for top provinces
+      const placedLabels=[];
+      const pinsHtml=activeProvinces.map((p,idx)=>{
+        const gp=geoProvMap[p.province];
+        if(!gp)return '';
+        const ratio=Math.sqrt((Number(p.amount_satang)||0)/maxProvAmt);
+        const rDot=Math.round(5 + ratio*6);
+        const rPulse=rDot+6;
+        let showLbl=false;
+        if(idx<8){
+          const tooClose=placedLabels.some(([px,py])=>Math.abs(px-gp.cx)<85 && Math.abs(py-gp.cy)<30);
+          if(!tooClose){
+            showLbl=true;
+            placedLabels.push([gp.cx,gp.cy]);
+          }
+        }
+        const lx=gp.cx>=290?gp.cx+rDot+6:gp.cx-rDot-6;
+        const anchor=gp.cx>=290?'start':'end';
+        return `<g class="th-prov-pin" data-prov="${esc(p.province)}" data-reg="${esc(p.region)}">
+          <circle class="pin-pulse" cx="${gp.cx}" cy="${gp.cy}" r="${rPulse}"></circle>
+          <circle class="pin-dot" cx="${gp.cx}" cy="${gp.cy}" r="${rDot}"></circle>
+          ${showLbl?`<text class="th-map-label" x="${lx}" y="${gp.cy+5}" text-anchor="${anchor}">${esc(p.province)}</text>`:''}
+        </g>`;
+      }).join('');
+
+      return `<div class="th-map-viewport" id="th-map-viewport">
+        <div class="th-map-badge" id="th-map-badge">77 จังหวัด · ซูม 1.0×</div>
+        <div class="th-map-controls">
+          <button type="button" class="th-zoom-btn" id="th-zoom-in" title="ซูมเข้า (+)">＋</button>
+          <button type="button" class="th-zoom-btn" id="th-zoom-out" title="ซูมออก (−)">−</button>
+          <button type="button" class="th-zoom-btn" id="th-zoom-reset" title="รีเซ็ตมุมมองทั้งประเทศ">⟲</button>
+        </div>
+        <svg class="th-map-svg" id="th-real-svg" viewBox="${vx} ${vy} ${vw} ${vh}" role="img" aria-label="แผนที่ขอบเขต 77 จังหวัดประเทศไทย">
+          <g id="th-provinces-layer">${pathsHtml}</g>
+          <g id="th-pins-layer">${pinsHtml}</g>
+        </svg>
+      </div>`;
+    };
+
+    const renderProvinceList=(sortMode,regFilter)=>{
+      const filtered=provinces.filter(p=>regFilter==='all'||p.region===regFilter);
+      if(!filtered.length)return '<div class="empty">ไม่มีข้อมูลผู้บริจาคในภูมิภาคที่เลือก</div>';
+      const sorted=[...filtered].sort((x,y)=>sortMode==='donors'
+        ?(y.donor_count-x.donor_count || y.amount_satang-x.amount_satang)
+        :(y.amount_satang-x.amount_satang || y.donor_count-x.donor_count));
+      const maxVal=Math.max(1,...sorted.map(x=>sortMode==='donors'?(Number(x.donor_count)||0):(Number(x.amount_satang)||0)));
+      return `<div class="rank-list prov-scroll-list">${sorted.map((p,idx)=>{
+        const val=sortMode==='donors'?(Number(p.donor_count)||0):(Number(p.amount_satang)||0);
+        const pct=Math.min(100,Math.max(0,Math.round((val/maxVal)*100)));
+        const rankCls=idx===0?'top-1':idx===1?'top-2':idx===2?'top-3':'';
+        return `<div class="rank-card" data-prov-row="${esc(p.province)}">
+          <div class="rank-row-top">
+            <div class="rank-left">
+              <span class="rank-num ${rankCls}">${idx+1}</span>
+              <div class="rank-title-wrap">
+                <div class="rank-title">${esc(p.province)} <span class="pill">${esc(p.region_label)}</span></div>
+                <div class="rank-meta">
+                  <span>ผู้บริจาค ${num(p.donor_count)} คน</span>
+                  <span>·</span>
+                  <span>${num(p.count)} รายการ</span>
+                  <span>·</span>
+                  <span>เฉลี่ย ${money(p.avg_satang)}/บิล</span>
+                </div>
+              </div>
+            </div>
+            <div class="rank-right">
+              <strong class="rank-amount">${sortMode==='donors'?`${num(p.donor_count)} คน`:money(p.amount_satang)}</strong>
+              <span class="rank-share">${sortMode==='donors'?money(p.amount_satang):`${p.share_pct}% ของยอดรวม`}</span>
+            </div>
+          </div>
+          <div class="progress-line compact"><div class="w-pct-${pct}"></div></div>
+        </div>`;
+      }).join('')}</div>`;
+    };
+
+    const topProv=activeProvinces[0]||provinces[0]||null;
+    const defaultInspectorHtml=topProv
+      ?`<div class="th-map-inspector-title"><span>📍 อันดับ 1: ${esc(topProv.province)}</span><span class="pill green">${esc(topProv.region_label)}</span></div>
+        <div class="th-map-inspector-metrics"><span>ยอดรวม: <strong>${money(topProv.amount_satang)}</strong> (${topProv.share_pct}%)</span><span>ผู้บริจาค: <strong>${num(topProv.donor_count)} คน</strong></span><span>จำนวน: <strong>${num(topProv.count)} บิล</strong></span></div>`
+      :`<div class="th-map-inspector-title"><span>📍 แผนที่ผู้บริจาคประเทศไทย</span></div><div class="th-map-inspector-metrics"><span>คลิกภูมิภาคหรือจุดจังหวัดบนแผนที่เพื่อดูรายละเอียด</span></div>`;
+
     const box=$('#page-content');
-    box.innerHTML=header('ANALYTICS / REPORTS','รายงานและสถิติ','วิเคราะห์ยอดบริจาคตามช่วงวันที่ โครงการ และส่งออกข้อมูล CSV',roleAllows('donations',true)?btn('＋ เพิ่มรายการบริจาค','new-donation','primary'):'')+
+    box.innerHTML=header('ANALYTICS / EXECUTIVE REPORTS','รายงานวิเคราะห์ผู้บริหาร','วิเคราะห์แนวโน้มยอดบริจาค เปรียบเทียบโครงการตามเป้าหมาย และแผนที่จังหวัดผู้บริจาค',roleAllows('donations',true)?btn('＋ เพิ่มรายการบริจาค','new-donation','primary'):'')+
       renderDateFilterBar()+
       `<div class="stat-grid">${stats.map(([name,val,mod,sub])=>`<div class="stat-card"><div class="stat-top">${esc(name)}<span class="stat-icon">${icons[mod]}</span></div><div class="stat-num">${esc(val)}</div><div class="stat-sub">${esc(sub)}</div></div>`).join('')}</div>
-      <div class="dashboard-grid"><section class="panel"><div class="panel-head"><div><h3>แนวโน้มยอดบริจาค</h3><small>${esc(periodNote)} · ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div><div class="chart-toggle-pill"><button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-rep-chart-mode="amount" title="ดูกราฟเปรียบเทียบตามยอดเงิน (บาท)">฿ ยอดเงิน</button><button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-rep-chart-mode="count" title="ดูกราฟเปรียบเทียบตามจำนวนรายการบริจาค"># จำนวนรายการ</button></div></div><div class="bars" id="rep-trend-bars">${trend.html}</div><div class="chart-spacer"></div></section><section class="panel"><div class="panel-head"><div><h3>ยอดบริจาคแยกตามโครงการ</h3><small>${esc(periodNote)}</small></div></div><div class="stat-list">${campaigns.length?campaigns.map(([id,amount])=>{const cCnt=campCounts[id]||0; const cPct=a.confirmed_satang>0?Math.round((amount/a.confirmed_satang)*100):0; return `<div><div class="stat-list-row"><span>${esc(campaignNames[id]||id)}</span><strong>${money(amount)} <small class="campaign-count-badge">(${num(cCnt)} รายการ · ${cPct}%)</small></strong></div><div class="progress-line"><div class="w-pct-${Math.min(100,Math.max(0,Math.round(amount/max*100)))}"></div></div></div>`;}).join(''):'<div class="empty">ไม่มีข้อมูลในช่วงเวลานี้</div>'}</div></section></div>
-      <section class="panel"><h3>⇩ ส่งออกข้อมูลรายงาน (CSV สำหรับ Excel)</h3><p class="muted">คลิกเพื่อดาวน์โหลดไฟล์ CSV (${esc(periodNote)})</p><div class="quick-actions">${['donations','contacts','campaigns','hadeeya','stock_lots','shipments'].filter(roleAllows).map(m=>btn('⇩ ส่งออก '+labelFor(m),'export-'+m)).join('')}</div></section>`;
-    box.querySelectorAll('[data-rep-chart-mode]').forEach(btn => {
-      btn.onclick = () => {
-        currentChartMode = btn.dataset.repChartMode;
-        box.querySelectorAll('[data-rep-chart-mode]').forEach(b => b.classList.toggle('active', b.dataset.repChartMode === currentChartMode));
+
+      <div class="dashboard-grid">
+        <section class="panel">
+          <div class="panel-head">
+            <div><h3>แนวโน้มยอดบริจาครายเดือน</h3><small>${esc(periodNote)} · ยอดเงินรวม <strong>${money(trend.totalSatang)}</strong> · จำนวน <strong>${num(trend.totalCount)}</strong> รายการ</small></div>
+            <div class="chart-toggle-pill">
+              <button type="button" class="chart-mode-btn ${currentChartMode==='amount'?'active':''}" data-rep-chart-mode="amount">฿ ยอดเงิน</button>
+              <button type="button" class="chart-mode-btn ${currentChartMode==='count'?'active':''}" data-rep-chart-mode="count"># จำนวนรายการ</button>
+            </div>
+          </div>
+          <div class="bars" id="rep-trend-bars">${trend.html}</div>
+          <div class="chart-spacer"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div><h3>ยอดบริจาคแยกตามโครงการ</h3><small>${esc(periodNote)}</small></div>
+            <div class="panel-head-actions">
+              <div class="chart-toggle-pill">
+                <button type="button" class="chart-mode-btn ${repCampaignMode==='share'?'active':''}" data-camp-mode="share">สัดส่วนรวม</button>
+                <button type="button" class="chart-mode-btn ${repCampaignMode==='goal'?'active':''}" data-camp-mode="goal">% เป้าหมาย</button>
+              </div>
+              <button type="button" class="btn small" data-analytics-export="campaigns" title="ส่งออกสรุปยอดตามโครงการเป็น CSV">⇩ CSV</button>
+            </div>
+          </div>
+          <div id="rep-campaign-box">${renderCampaignList(repCampaignMode)}</div>
+        </section>
+      </div>
+
+      <section class="panel analytics-panel-mb">
+        <div class="panel-head">
+          <div>
+            <h3>🗺️ แผนที่ประเทศไทยจริง 77 จังหวัด และอันดับพื้นที่ผู้บริจาค (Thailand GIS Choropleth)</h3>
+            <small>ซูมเข้า-ออกด้วยลูกกลิ้งเมาส์ ลากเพื่อเลื่อนแผนที่ หรือคลิกเลือกจังหวัด/ภูมิภาคเพื่อดูยอดบริจาคเชิงลึก · ${esc(periodNote)}</small>
+          </div>
+          <div class="panel-head-actions">
+            <div class="chart-toggle-pill">
+              <button type="button" class="chart-mode-btn ${repProvinceSort==='amount'?'active':''}" data-prov-sort="amount">฿ ยอดบริจาค</button>
+              <button type="button" class="chart-mode-btn ${repProvinceSort==='donors'?'active':''}" data-prov-sort="donors">♙ จำนวนผู้บริจาค</button>
+            </div>
+            <button type="button" class="btn small" data-analytics-export="provinces">⇩ ส่งออก CSV จังหวัด</button>
+          </div>
+        </div>
+
+        <div class="geo-layout">
+          <div class="th-map-stage">
+            <div id="th-map-wrap">${buildRealThailandMapSvg()}</div>
+            <div class="th-map-legend">
+              <span>ความหนาแน่นยอดบริจาครายจังหวัด</span>
+              <span class="legend-scale">฿0 <i class="legend-swatch h0"></i><i class="legend-swatch h1"></i><i class="legend-swatch h2"></i><i class="legend-swatch h3"></i><i class="legend-swatch h4"></i> สูงสุด</span>
+            </div>
+            <div class="th-map-inspector" id="th-map-inspector">${defaultInspectorHtml}</div>
+          </div>
+
+          <div>
+            <div class="region-chips" id="rep-region-chips">
+              <button type="button" class="region-chip ${repRegionFilter==='all'?'active':''}" data-reg-chip="all">ทุกภูมิภาค <small>(${num(provinces.length)})</small></button>
+              ${regions.map(r=>`<button type="button" class="region-chip ${repRegionFilter===r.region?'active':''}" data-reg-chip="${esc(r.region)}">${esc(r.label)} <small>(${money(r.amount_satang)})</small></button>`).join('')}
+            </div>
+            <div id="rep-province-box">${renderProvinceList(repProvinceSort,repRegionFilter)}</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel"><h3>⇩ ส่งออกฐานข้อมูลดิบตามโมดูล (CSV สำหรับ Excel)</h3><p class="muted">คลิกเพื่อดาวน์โหลดไฟล์ CSV รายการข้อมูลดิบ (${esc(periodNote)})</p><div class="quick-actions">${['donations','contacts','campaigns','hadeeya','stock_lots','shipments'].filter(roleAllows).map(m=>btn('⇩ ส่งออก '+labelFor(m),'export-'+m)).join('')}</div></section>`;
+
+    // Wire Monthly Trend toggle
+    box.querySelectorAll('[data-rep-chart-mode]').forEach(b => {
+      b.onclick = () => {
+        currentChartMode = b.dataset.repChartMode;
+        box.querySelectorAll('[data-rep-chart-mode]').forEach(x => x.classList.toggle('active', x.dataset.repChartMode === currentChartMode));
         const updated = buildTrendChart(a.by_month, a.by_month_counts||{}, 'ไม่มีรายการบริจาคที่ยืนยันในช่วงเวลานี้', currentChartMode);
         const barsEl = $('#rep-trend-bars');
         if(barsEl) barsEl.innerHTML = updated.html;
       };
     });
+
+    // Wire Campaign Mode toggle
+    box.querySelectorAll('[data-camp-mode]').forEach(b => {
+      b.onclick = () => {
+        repCampaignMode = b.dataset.campMode;
+        box.querySelectorAll('[data-camp-mode]').forEach(x => x.classList.toggle('active', x.dataset.campMode === repCampaignMode));
+        const el = $('#rep-campaign-box');
+        if(el) el.innerHTML = renderCampaignList(repCampaignMode);
+      };
+    });
+
+    // Interactive GIS Camera (Zoom / Pan / Region Auto-Zoom)
+    const svgEl = $('#th-real-svg');
+    const viewportEl = $('#th-map-viewport');
+    const badgeEl = $('#th-map-badge');
+    const [baseX, baseY, baseW, baseH] = thGeo?.viewBox || [0, 0, 608, 1080];
+    let cam = { x: baseX, y: baseY, w: baseW, h: baseH };
+
+    const applyCamera = () => {
+      if(!svgEl) return;
+      cam.w = Math.max(baseW / 9, Math.min(baseW, cam.w));
+      cam.h = cam.w * (baseH / baseW);
+      cam.x = Math.max(baseX - cam.w * 0.25, Math.min(baseX + baseW - cam.w * 0.75, cam.x));
+      cam.y = Math.max(baseY - cam.h * 0.25, Math.min(baseY + baseH - cam.h * 0.75, cam.y));
+      svgEl.setAttribute('viewBox', `${cam.x.toFixed(1)} ${cam.y.toFixed(1)} ${cam.w.toFixed(1)} ${cam.h.toFixed(1)}`);
+      if(badgeEl){
+        const z = (baseW / cam.w).toFixed(1);
+        const regTitle = repRegionFilter !== 'all' ? (regionLabelLookup[repRegionFilter] || '77 จังหวัด') : '77 จังหวัด';
+        badgeEl.textContent = `${regTitle} · ซูม ${z}×`;
+      }
+    };
+
+    const zoomAt = (factor, anchorX = cam.x + cam.w / 2, anchorY = cam.y + cam.h / 2) => {
+      const nextW = Math.max(baseW / 9, Math.min(baseW, cam.w * factor));
+      const nextH = nextW * (baseH / baseW);
+      const rx = (anchorX - cam.x) / cam.w;
+      const ry = (anchorY - cam.y) / cam.h;
+      cam.w = nextW;
+      cam.h = nextH;
+      cam.x = anchorX - rx * nextW;
+      cam.y = anchorY - ry * nextH;
+      applyCamera();
+    };
+
+    const fitMapBbox = (bbox, padFactor = 0.22) => {
+      if(!bbox) {
+        cam = { x: baseX, y: baseY, w: baseW, h: baseH };
+        applyCamera();
+        return;
+      }
+      const [x1, y1, x2, y2] = bbox;
+      const bw = Math.max(45, x2 - x1);
+      const bh = Math.max(60, y2 - y1);
+      const cx = (x1 + x2) / 2;
+      const cy = (y1 + y2) / 2;
+      const aspect = baseW / baseH;
+      let targetW = bw * (1 + padFactor * 2);
+      let targetH = bh * (1 + padFactor * 2);
+      if(targetW / targetH > aspect) {
+        targetH = targetW / aspect;
+      } else {
+        targetW = targetH * aspect;
+      }
+      cam.w = Math.max(baseW / 8, Math.min(baseW, targetW));
+      cam.h = cam.w / aspect;
+      cam.x = cx - cam.w / 2;
+      cam.y = cy - cam.h / 2;
+      applyCamera();
+    };
+
+    $('#th-zoom-in')?.addEventListener('click', () => zoomAt(0.7));
+    $('#th-zoom-out')?.addEventListener('click', () => zoomAt(1.42));
+    $('#th-zoom-reset')?.addEventListener('click', () => {
+      repRegionFilter = 'all';
+      fitMapBbox(null);
+      syncRegionUI(false);
+    });
+
+    if(viewportEl && svgEl){
+      viewportEl.addEventListener('wheel', e => {
+        e.preventDefault();
+        const rect = svgEl.getBoundingClientRect();
+        const px = (e.clientX - rect.left) / Math.max(1, rect.width);
+        const py = (e.clientY - rect.top) / Math.max(1, rect.height);
+        const ax = cam.x + px * cam.w;
+        const ay = cam.y + py * cam.h;
+        zoomAt(e.deltaY < 0 ? 0.8 : 1.25, ax, ay);
+      }, { passive: false });
+
+      let dragState = null;
+      let didDrag = false;
+      viewportEl.addEventListener('pointerdown', e => {
+        if(e.target.closest('.th-map-controls') || e.button !== 0) return;
+        dragState = { pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, camX: cam.x, camY: cam.y, captured: false };
+        didDrag = false;
+      });
+      viewportEl.addEventListener('pointermove', e => {
+        if(!dragState || e.pointerId !== dragState.pointerId) return;
+        const dxPx = e.clientX - dragState.startX;
+        const dyPx = e.clientY - dragState.startY;
+        if(!didDrag && (Math.abs(dxPx) > 4 || Math.abs(dyPx) > 4)) {
+          didDrag = true;
+          viewportEl.classList.add('dragging');
+          try { viewportEl.setPointerCapture(e.pointerId); dragState.captured = true; } catch(_) {}
+        }
+        if(!didDrag) return;
+        const rect = svgEl.getBoundingClientRect();
+        cam.x = dragState.camX - (dxPx / Math.max(1, rect.width)) * cam.w;
+        cam.y = dragState.camY - (dyPx / Math.max(1, rect.height)) * cam.h;
+        applyCamera();
+      });
+      const endDrag = e => {
+        if(dragState && dragState.captured) {
+          try { viewportEl.releasePointerCapture(e.pointerId); } catch(_) {}
+        }
+        dragState = null;
+        viewportEl.classList.remove('dragging');
+      };
+      viewportEl.addEventListener('pointerup', endDrag);
+      viewportEl.addEventListener('pointercancel', endDrag);
+      viewportEl.addEventListener('click', e => {
+        if(didDrag){
+          e.stopPropagation();
+          didDrag = false;
+        }
+      }, true);
+    }
+
+    const inspectProvince = (provName) => {
+      const insp = $('#th-map-inspector');
+      if(!insp) return;
+      const p = provDataMap[provName];
+      const gp = geoProvMap[provName];
+      const regLbl = p?.region_label || regionLabelLookup[gp?.reg] || 'ประเทศไทย';
+      if(p){
+        insp.innerHTML = `<div class="th-map-inspector-title"><span>📍 จังหวัด${esc(provName)}</span><span class="pill green">${esc(regLbl)}</span></div>
+          <div class="th-map-inspector-metrics"><span>ยอดรวม: <strong>${money(p.amount_satang)}</strong> (${p.share_pct}%)</span><span>ผู้บริจาค: <strong>${num(p.donor_count)} คน</strong></span><span>จำนวน: <strong>${num(p.count)} บิล</strong></span></div>`;
+      } else {
+        insp.innerHTML = `<div class="th-map-inspector-title"><span>📍 จังหวัด${esc(provName)}</span><span class="pill">${esc(regLbl)}</span></div>
+          <div class="th-map-inspector-metrics"><span>ยอดรวม: <strong>฿0.00</strong></span><span>ยังไม่มีรายการบริจาคยืนยันในช่วงเวลานี้</span></div>`;
+      }
+      box.querySelectorAll('.th-prov-path').forEach(el => el.classList.toggle('active-prov', el.dataset.provPoly === provName));
+      box.querySelectorAll('.th-prov-pin').forEach(pin => pin.classList.toggle('active-pin', pin.dataset.prov === provName));
+      box.querySelectorAll('[data-prov-row]').forEach(row => row.classList.toggle('active-prov-row', row.dataset.provRow === provName));
+    };
+
+    const inspectRegion = (regKey) => {
+      const r = regionMapMeta[regKey];
+      const insp = $('#th-map-inspector');
+      if(!r || !insp) return;
+      insp.innerHTML = `<div class="th-map-inspector-title"><span>🗺️ ${esc(r.label)}</span><span class="pill blue">${num(r.province_count)} จังหวัดที่ร่วมบริจาค</span></div>
+        <div class="th-map-inspector-metrics"><span>ยอดรวม: <strong>${money(r.amount_satang)}</strong> (${r.share_pct}%)</span><span>ผู้บริจาค: <strong>${num(r.donor_count)} คน</strong></span><span>จำนวน: <strong>${num(r.count)} บิล</strong></span></div>`;
+    };
+
+    function wireProvinceRowHover(){
+      box.querySelectorAll('[data-prov-row]').forEach(row => {
+        const pName = row.dataset.provRow;
+        row.addEventListener('mouseenter', () => inspectProvince(pName));
+        row.addEventListener('click', () => {
+          inspectProvince(pName);
+          const gp = geoProvMap[pName];
+          if(gp?.bbox) fitMapBbox(gp.bbox, 0.9);
+        });
+      });
+    }
+
+    const syncRegionUI = (autoZoom = true) => {
+      box.querySelectorAll('[data-reg-chip]').forEach(c => c.classList.toggle('active', c.dataset.regChip === repRegionFilter));
+      box.querySelectorAll('.th-prov-path').forEach(p => {
+        p.classList.toggle('dimmed', repRegionFilter !== 'all' && p.dataset.provReg !== repRegionFilter);
+      });
+      const pBox = $('#rep-province-box');
+      if(pBox) pBox.innerHTML = renderProvinceList(repProvinceSort, repRegionFilter);
+      wireProvinceRowHover();
+      if(autoZoom){
+        if(repRegionFilter === 'all' || repRegionFilter === 'unknown'){
+          fitMapBbox(null);
+        } else if(thGeo?.regionBboxes?.[repRegionFilter]){
+          fitMapBbox(thGeo.regionBboxes[repRegionFilter], 0.16);
+        }
+      } else {
+        applyCamera();
+      }
+    };
+
+    box.querySelectorAll('[data-prov-sort]').forEach(b => {
+      b.onclick = () => {
+        repProvinceSort = b.dataset.provSort;
+        box.querySelectorAll('[data-prov-sort]').forEach(x => x.classList.toggle('active', x.dataset.provSort === repProvinceSort));
+        syncRegionUI(false);
+      };
+    });
+
+    box.querySelectorAll('[data-reg-chip]').forEach(chip => {
+      chip.onclick = () => {
+        repRegionFilter = chip.dataset.regChip;
+        if(repRegionFilter !== 'all') inspectRegion(repRegionFilter);
+        syncRegionUI(true);
+      };
+    });
+
+    box.querySelectorAll('.th-prov-path').forEach(path => {
+      const pName = path.dataset.provPoly;
+      path.addEventListener('mouseenter', () => inspectProvince(pName));
+      path.addEventListener('click', () => {
+        inspectProvince(pName);
+        const gp = geoProvMap[pName];
+        if(gp?.bbox) fitMapBbox(gp.bbox, 0.95);
+      });
+    });
+
+    if(repRegionFilter !== 'all' && thGeo?.regionBboxes?.[repRegionFilter]){
+      fitMapBbox(thGeo.regionBboxes[repRegionFilter], 0.16);
+    }
+    wireProvinceRowHover();
     wireDateFilterBar();
+
+    // Wire Analytics CSV Exports
+    box.querySelectorAll('[data-analytics-export]').forEach(b => {
+      b.onclick = () => {
+        const type = b.dataset.analyticsExport;
+        const u = new URL(location.pathname, location.href);
+        u.searchParams.set('api', 'export-analytics');
+        u.searchParams.set('type', type);
+        if(state.dateFrom) u.searchParams.set('date_from', state.dateFrom);
+        if(state.dateTo) u.searchParams.set('date_to', state.dateTo);
+        location.href = u.toString();
+      };
+    });
+
     box.querySelectorAll('[data-action^="export-"]').forEach(b=>b.onclick=()=>{
       const mod=b.dataset.action.replace('export-','');
       const u=new URL(location.pathname,location.href);
@@ -1857,15 +3102,166 @@
             <div class="db-stat-box"><span>ขนาดฐานข้อมูล SQLite</span><strong id="db-size-label">${esc(fmtKB(dbInfo.db_bytes))}</strong></div>
             <div class="db-stat-box"><span>ข้อมูลในระบบทั้งหมด</span><strong>${num(dbInfo.total_records)} รายการ</strong></div>
             <div class="db-stat-box"><span>ไฟล์แนบในระบบ (Uploads)</span><strong>${num(dbInfo.uploads_count)} ไฟล์ (${esc(fmtKB(dbInfo.uploads_bytes))})</strong></div>
-            <div class="db-stat-box"><span>สำรองข้อมูลผ่านเว็บล่าสุด</span><strong>${esc(dbInfo.last_backup_at?dateDisplay(dbInfo.last_backup_at):'ยังไม่เคย')}</strong></div>
+            <div class="db-stat-box">
+              <span>สำรองข้อมูลผ่านเว็บล่าสุด</span>
+              <strong id="db-last-bkp-label">${esc(dbInfo.last_backup_at?dateDisplay(dbInfo.last_backup_at):'ยังไม่เคย')}</strong>
+              <span id="db-last-bkp-sub">${dbInfo.last_backup_format?`ไฟล์ .${esc(dbInfo.last_backup_format)}${dbInfo.last_backup_by?' · โดย '+esc(dbInfo.last_backup_by):''}`:'ยังไม่มีประวัติ'}</span>
+            </div>
           </div>
+
+          <div class="wcb-vault-box">
+            <div class="wcb-vault-head">
+              <div>
+                <h4>🔐 สำรองข้อมูลแบบเข้ารหัสลับ (.wcb — Encrypted Full Backup)</h4>
+                <p>แพ็กฐานข้อมูล <code>crm.sqlite</code> พร้อมไฟล์สลิป/รูปแนบทั้งหมดใน <code>storage/uploads/</code> เข้ารหัสด้วย Libsodium (<code>XChaCha20-Poly1305</code>) รองรับการกู้คืนผ่าน <code>scripts/restore.php</code> ได้ทันที</p>
+              </div>
+              <span class="pill ${dbInfo.sodium_loaded!==false?'green':'red'}">${dbInfo.sodium_loaded!==false?'✓ พร้อมเข้ารหัส Libsodium':'⚠ ไม่พบ PHP sodium'}</span>
+            </div>
+
+            <div class="form-grid">
+              <label class="form-field">
+                <span class="field-title">
+                  <span>รหัสผ่านเข้ารหัสไฟล์สำรอง (อย่างน้อย 12 ตัวอักษร) <span class="req-star">*</span></span>
+                  <span id="wcb-strength-pill" class="opt-tag">ขั้นต่ำ 12 ตัว</span>
+                </span>
+                <div class="pass-input-wrap">
+                  <input id="wcb-pass" type="password" minlength="12" placeholder="ตั้งรหัสผ่านสำหรับล็อกไฟล์ .wcb (12 ตัวขึ้นไป)…" autocomplete="new-password">
+                  <button type="button" class="pass-toggle-btn" id="wcb-toggle-pass">แสดง</button>
+                </div>
+              </label>
+
+              <label class="form-field">
+                <span class="field-title">
+                  <span>ยืนยันรหัสผ่านเข้ารหัสอีกครั้ง <span class="req-star">*</span></span>
+                  <span id="wcb-match-pill" class="opt-tag">รอตรวจสอบ</span>
+                </span>
+                <div class="pass-input-wrap">
+                  <input id="wcb-pass-confirm" type="password" minlength="12" placeholder="พิมพ์รหัสผ่านเดิมซ้ำอีกครั้งเพื่อป้องกันพิมพ์ผิด…" autocomplete="new-password">
+                </div>
+              </label>
+            </div>
+
+            <div class="wcb-actions-bar">
+              <div class="wcb-warning-text">
+                <strong>⚠ สำคัญ:</strong> กรุณาจดจำรหัสผ่านนี้ไว้ให้แม่นยำ ระบบไม่บันทึกรหัสผ่านไว้บนเซิร์ฟเวอร์ หากลืมรหัสผ่านจะไม่สามารถถอดรหัสไฟล์ <code>.wcb</code> ได้
+                <span id="wcb-last-meta">${dbInfo.last_wcb_backup_at?` · ล่าสุด: <strong>${esc(dateDisplay(dbInfo.last_wcb_backup_at))}</strong> (${esc(fmtKB(dbInfo.last_wcb_bytes||0))})`:''}</span>
+              </div>
+              <button type="button" class="btn primary" id="btn-backup-wcb" ${dbInfo.sodium_loaded===false?'disabled':''}>🔐 สร้างและดาวน์โหลดไฟล์สำรอง (.wcb)</button>
+            </div>
+
+            <details class="restore-guide-details">
+              <summary>📖 ดูคำสั่งกู้คืนข้อมูล (Restore) จากไฟล์ .wcb ผ่าน Terminal</summary>
+              <pre class="cli-code-block"># Windows PowerShell (ปิด Apache / Web Process ก่อนรันกู้คืน)
+$env:CRM_BACKUP_PASSWORD="รหัสผ่านที่ตั้งไว้ตอนสำรองข้อมูล"
+php scripts/restore.php C:\path\to\whitechannel-crm-backup.wcb --i-understand
+Remove-Item Env:CRM_BACKUP_PASSWORD</pre>
+            </details>
+          </div>
+
+          <div class="db-sub-actions-title">เครื่องมือสแนปช็อตด่วน (ไม่เข้ารหัส) และดูแลรักษาฐานข้อมูล</div>
           <div class="db-actions-row">
-            <button type="button" class="btn primary" id="btn-backup-sqlite">⇩ ดาวน์โหลดฐานข้อมูล (.sqlite)</button>
-            <button type="button" class="btn" id="btn-backup-full">⇩ ดาวน์โหลดชุดข้อมูลเต็ม + ไฟล์แนบ (.tar)</button>
+            <button type="button" class="btn" id="btn-backup-sqlite">⇩ ดาวน์โหลดเฉพาะฐานข้อมูล (.sqlite)</button>
+            <button type="button" class="btn" id="btn-backup-full">⇩ ดาวน์โหลดชุดข้อมูล + ไฟล์แนบ (.tar)</button>
             <button type="button" class="btn ghost" id="btn-optimize-db">⚡ จัดระเบียบและบีบอัดฐานข้อมูล (VACUUM)</button>
           </div>
         ` : `<p class="secondary-note">ฐานข้อมูลเก็บอยู่ที่ <code>storage/crm.sqlite</code> เฉพาะผู้ดูแลระบบ (Admin) สามารถดาวน์โหลดไฟล์สำรองฐานข้อมูลผ่านหน้าเว็บได้โดยตรง</p>`}
       </section>`;
+
+    // Wire Encrypted .wcb Backup form controls
+    const wcbPassEl=$('#wcb-pass');
+    const wcbConfirmEl=$('#wcb-pass-confirm');
+    const wcbStrengthEl=$('#wcb-strength-pill');
+    const wcbMatchEl=$('#wcb-match-pill');
+    const updateWcbIndicators=()=>{
+      if(!wcbPassEl||!wcbConfirmEl)return;
+      const p=wcbPassEl.value;
+      const c=wcbConfirmEl.value;
+      if(wcbStrengthEl){
+        if(!p.length){wcbStrengthEl.className='opt-tag';wcbStrengthEl.textContent='ขั้นต่ำ 12 ตัว';}
+        else if(p.length<12){wcbStrengthEl.className='pill red';wcbStrengthEl.textContent=`สั้นเกินไป (${p.length}/12)`;}
+        else if(p.length>=16 && /[A-Z]/.test(p) && /\d/.test(p)){wcbStrengthEl.className='pill green';wcbStrengthEl.textContent='ความปลอดภัยสูงมาก';}
+        else{wcbStrengthEl.className='pill green';wcbStrengthEl.textContent=`พร้อมใช้งาน (${p.length} ตัว)`;}
+      }
+      if(wcbMatchEl){
+        if(!c.length){wcbMatchEl.className='opt-tag';wcbMatchEl.textContent='รอตรวจสอบ';}
+        else if(p===c){wcbMatchEl.className='pill green';wcbMatchEl.textContent='✓ รหัสผ่านตรงกัน';}
+        else{wcbMatchEl.className='pill red';wcbMatchEl.textContent='✕ รหัสผ่านไม่ตรงกัน';}
+      }
+    };
+    wcbPassEl?.addEventListener('input',updateWcbIndicators);
+    wcbConfirmEl?.addEventListener('input',updateWcbIndicators);
+    $('#wcb-toggle-pass')?.addEventListener('click',e=>{
+      if(!wcbPassEl||!wcbConfirmEl)return;
+      const show=wcbPassEl.type==='password';
+      wcbPassEl.type=show?'text':'password';
+      wcbConfirmEl.type=show?'text':'password';
+      e.currentTarget.textContent=show?'ซ่อน':'แสดง';
+    });
+    $('#btn-backup-wcb')?.addEventListener('click',async e=>{
+      const btnEl=e.currentTarget;
+      const password=wcbPassEl?.value||'';
+      const confirmPass=wcbConfirmEl?.value||'';
+      if(password.length<12){
+        toast('กรุณาตั้งรหัสผ่านเข้ารหัสไฟล์สำรองอย่างน้อย 12 ตัวอักษร',true);
+        wcbPassEl?.focus();
+        return;
+      }
+      if(password!==confirmPass){
+        toast('รหัสผ่านทั้งสองช่องไม่ตรงกัน กรุณาตรวจสอบอีกครั้ง',true);
+        wcbConfirmEl?.focus();
+        return;
+      }
+      const origLabel=btnEl.textContent;
+      btnEl.disabled=true;
+      btnEl.textContent='⏳ กำลังสร้างสแนปช็อตและเข้ารหัสไฟล์ .wcb…';
+      try{
+        const url=new URL(location.pathname,location.href);
+        url.searchParams.set('api','backup-encrypted');
+        const res=await fetch(url,{
+          method:'POST',
+          credentials:'same-origin',
+          headers:{'Content-Type':'application/json','X-CSRF-Token':csrf()},
+          body:JSON.stringify({password}),
+          cache:'no-store'
+        });
+        if(!res.ok){
+          const errJson=await res.json().catch(()=>({error:`HTTP ${res.status}`}));
+          throw new Error(errJson.error||`เกิดข้อผิดพลาด (HTTP ${res.status})`);
+        }
+        const blob=await res.blob();
+        const headerName=res.headers.get('X-Backup-Filename');
+        const stamp=new Date().toISOString().replace(/[-:T]/g,'').slice(0,14);
+        const filename=headerName||`whitechannel-crm-backup-${stamp}.wcb`;
+        const dlUrl=URL.createObjectURL(blob);
+        const aTag=document.createElement('a');
+        aTag.href=dlUrl;
+        aTag.download=filename;
+        document.body.appendChild(aTag);
+        aTag.click();
+        aTag.remove();
+        setTimeout(()=>URL.revokeObjectURL(dlUrl),5000);
+
+        if(wcbPassEl)wcbPassEl.value='';
+        if(wcbConfirmEl)wcbConfirmEl.value='';
+        updateWcbIndicators();
+        toast(`เข้ารหัสและดาวน์โหลดไฟล์ ${filename} (${fmtKB(blob.size)}) เรียบร้อยแล้ว`);
+
+        try{
+          const fresh=await api('db-info');
+          const lastLbl=$('#db-last-bkp-label');
+          const lastSub=$('#db-last-bkp-sub');
+          const wcbMeta=$('#wcb-last-meta');
+          if(lastLbl&&fresh.last_backup_at)lastLbl.textContent=dateDisplay(fresh.last_backup_at);
+          if(lastSub)lastSub.textContent=`ไฟล์ .${fresh.last_backup_format||'wcb'}${fresh.last_backup_by?' · โดย '+fresh.last_backup_by:''}`;
+          if(wcbMeta&&fresh.last_wcb_backup_at)wcbMeta.innerHTML=` · ล่าสุด: <strong>${esc(dateDisplay(fresh.last_wcb_backup_at))}</strong> (${esc(fmtKB(fresh.last_wcb_bytes||blob.size))})`;
+        }catch(_){}
+      }catch(err){
+        toast(err.message||'ไม่สามารถสร้างไฟล์สำรองข้อมูลเข้ารหัสได้',true);
+      }finally{
+        btnEl.disabled=false;
+        btnEl.textContent=origLabel;
+      }
+    });
     $('#btn-backup-sqlite')?.addEventListener('click',()=>{
       toast('กำลังสร้างสแนปช็อตฐานข้อมูล SQLite สำหรับดาวน์โหลด…');
       location.href=`?api=backup-download&format=sqlite&_csrf=${encodeURIComponent(csrf())}`;

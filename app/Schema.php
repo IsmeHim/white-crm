@@ -256,6 +256,34 @@ final class Schema {
         if(mb_strpos($text,'โคราช')!==false)return 'นครราชสีมา';
         return '';
     }
+    public static function regionLabels(): array {
+        return [
+            'south'=>'ภาคใต้',
+            'bkk_metro'=>'กรุงเทพฯ และปริมณฑล',
+            'central'=>'ภาคกลาง',
+            'northeast'=>'ภาคตะวันออกเฉียงเหนือ',
+            'north'=>'ภาคเหนือ',
+            'east'=>'ภาคตะวันออก',
+            'west'=>'ภาคตะวันตก',
+            'unknown'=>'ไม่ระบุจังหวัด',
+        ];
+    }
+    public static function provinceRegion(string $province): string {
+        $p=trim($province);
+        if($p===''||$p==='ไม่ระบุจังหวัด')return 'unknown';
+        $normalized=self::detectProvince($p);
+        if($normalized!=='')$p=$normalized;
+        static $map=[
+            'กรุงเทพมหานคร'=>'bkk_metro','นนทบุรี'=>'bkk_metro','ปทุมธานี'=>'bkk_metro','สมุทรปราการ'=>'bkk_metro','สมุทรสาคร'=>'bkk_metro','นครปฐม'=>'bkk_metro',
+            'กระบี่'=>'south','ชุมพร'=>'south','ตรัง'=>'south','นครศรีธรรมราช'=>'south','นราธิวาส'=>'south','ปัตตานี'=>'south','พังงา'=>'south','พัทลุง'=>'south','ภูเก็ต'=>'south','ยะลา'=>'south','ระนอง'=>'south','สงขลา'=>'south','สตูล'=>'south','สุราษฎร์ธานี'=>'south',
+            'เชียงราย'=>'north','เชียงใหม่'=>'north','น่าน'=>'north','พะเยา'=>'north','แพร่'=>'north','แม่ฮ่องสอน'=>'north','ลำปาง'=>'north','ลำพูน'=>'north','อุตรดิตถ์'=>'north',
+            'กาฬสินธุ์'=>'northeast','ขอนแก่น'=>'northeast','ชัยภูมิ'=>'northeast','นครพนม'=>'northeast','นครราชสีมา'=>'northeast','บึงกาฬ'=>'northeast','บุรีรัมย์'=>'northeast','มหาสารคาม'=>'northeast','มุกดาหาร'=>'northeast','ยโสธร'=>'northeast','ร้อยเอ็ด'=>'northeast','เลย'=>'northeast','ศรีสะเกษ'=>'northeast','สกลนคร'=>'northeast','สุรินทร์'=>'northeast','หนองคาย'=>'northeast','หนองบัวลำภู'=>'northeast','อำนาจเจริญ'=>'northeast','อุดรธานี'=>'northeast','อุบลราชธานี'=>'northeast',
+            'จันทบุรี'=>'east','ฉะเชิงเทรา'=>'east','ชลบุรี'=>'east','ตราด'=>'east','ปราจีนบุรี'=>'east','ระยอง'=>'east','สระแก้ว'=>'east',
+            'กาญจนบุรี'=>'west','ตาก'=>'west','ประจวบคีรีขันธ์'=>'west','เพชรบุรี'=>'west','ราชบุรี'=>'west',
+            'กำแพงเพชร'=>'central','ชัยนาท'=>'central','นครนายก'=>'central','นครสวรรค์'=>'central','พระนครศรีอยุธยา'=>'central','พิจิตร'=>'central','พิษณุโลก'=>'central','เพชรบูรณ์'=>'central','ลพบุรี'=>'central','สมุทรสงคราม'=>'central','สระบุรี'=>'central','สิงห์บุรี'=>'central','สุโขทัย'=>'central','สุพรรณบุรี'=>'central','อ่างทอง'=>'central','อุทัยธานี'=>'central',
+        ];
+        return $map[$p]??'unknown';
+    }
     private static function nextCode(Store $store,string $collection,string $field,string $prefix): string {
         $existing=[];
         foreach($store->summaries($collection) as $item){
