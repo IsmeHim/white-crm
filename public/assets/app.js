@@ -243,7 +243,7 @@
 
     const scenePresets = {
       all:     { hero:true,  goal:true,  kpis:true,  map:true,  ranking:true,  feed:true  },
-      hero:    { hero:true,  goal:true,  kpis:false, map:false, ranking:false, feed:false },
+      hero:    { hero:true,  goal:true,  kpis:true,  map:false, ranking:false, feed:false },
       ranking: { hero:false, goal:false, kpis:false, map:false, ranking:true,  feed:false },
       geo:     { hero:false, goal:false, kpis:false, map:true,  ranking:true,  feed:false },
       feed:    { hero:false, goal:false, kpis:false, map:false, ranking:false, feed:true  }
@@ -254,6 +254,27 @@
       }
       return 'custom';
     };
+
+    const sceneOrder = ['all', 'hero', 'ranking', 'geo', 'feed'];
+    const defaultRotateCfg = {
+      enabled: false,
+      intervalSec: 15,
+      autoOnFullscreen: true,
+      scenes: { all: true, hero: true, ranking: true, geo: true, feed: true }
+    };
+    let wbRotateCfg = { ...defaultRotateCfg, scenes: { ...defaultRotateCfg.scenes } };
+    try{
+      const savedRot = JSON.parse(localStorage.getItem('wb-rotate-cfg-v1') || 'null');
+      if(savedRot && typeof savedRot === 'object'){
+        wbRotateCfg = {
+          ...defaultRotateCfg,
+          ...savedRot,
+          intervalSec: Math.max(5, Number(savedRot.intervalSec) || 15),
+          scenes: { ...defaultRotateCfg.scenes, ...(savedRot.scenes || {}) }
+        };
+      }
+    }catch(_){}
+    const saveRotateCfg = () => localStorage.setItem('wb-rotate-cfg-v1', JSON.stringify(wbRotateCfg));
 
     const [initialData, thGeo] = await Promise.all([
       api('wallboard', { campaign_id: wbSelectedCampaign, scope: wbScope }),
@@ -268,20 +289,24 @@
     let pulseProvince = (initialData.recent_feed || []).find(x => x.province)?.province || (initialData.top_provinces?.[0]?.province || '');
     let celebrateTimer = null;
     let wakeLockSentinel = null;
+    let isMapDragging = false;
+    let isSceneTransitioning = false;
+    let rotateElapsedMs = 0;
 
     const geoProvLookup = {};
     if(thGeo?.provinces){ thGeo.provinces.forEach(gp => { geoProvLookup[gp.th] = gp; }); }
 
     const box = $('#page-content');
     box.innerHTML = `<div class="wb-shell ${wbWidgets.cleanChrome?'wb-clean-chrome':''}" id="wb-shell">
+      <div class="progress-line wb-rotate-bar ${wbRotateCfg.enabled?'':'hidden'}" id="wb-rotate-bar"><div class="w-pct-0" id="wb-rotate-bar-fill"></div></div>
       <button type="button" class="wb-floating-restore ${wbWidgets.cleanChrome?'':'hidden'}" id="wb-restore-chrome-btn" title="แสดงแถบตั้งค่าและปุ่มควบคุม">⚙ ตั้งค่าจอ LIVE</button>
 
       <div class="wb-topbar">
         <div class="wb-brand">
-          <span class="wb-live-pill"><i class="wb-live-dot"></i> LIVE FUNDRAISING</span>
+          <span class="wb-live-pill"><i class="wb-live-dot"></i> LIVE</span>
           <div>
             <div class="wb-brand-title">WHITE CHANNEL · จอสดรายงานยอดระดมทุน</div>
-            <div class="wb-brand-sub">เลือกฉากออกจอทีวีสดได้อิสระ · อัปเดตอัตโนมัติทุก 5 วินาที</div>
+            <div class="wb-brand-sub">อัปเดตข้อมูลอัตโนมัติทุก 5 วินาที</div>
           </div>
           <div class="wb-clock" id="wb-clock">--:--:-- น.</div>
         </div>
@@ -294,14 +319,14 @@
           </div>
           <button type="button" class="wb-ctrl-btn ${soundOn?'active':''}" id="wb-sound-btn" title="เปิด/ปิดเสียงกระดิ่งเมื่อมียอดบริจาคใหม่">${soundOn?'🔔 เสียงเปิด':'🔕 ปิดเสียง'}</button>
           <button type="button" class="wb-ctrl-btn ${strictPrivacy?'active':''}" id="wb-privacy-btn" title="สลับโหมดซ่อนชื่อผู้บริจาคทั้งหมดบนหน้าจอ">${strictPrivacy?'👁 ซ่อนชื่อทั้งหมด':'👁 แสดงชื่อย่อ'}</button>
-          <button type="button" class="wb-ctrl-btn" id="wb-test-alert-btn" title="ทดสอบเสียงกระดิ่งและแบนเนอร์ฉลองยอดใหม่ก่อนออกอากาศ">✦ ทดสอบ</button>
+          <button type="button" class="wb-ctrl-btn" id="wb-test-alert-btn" title="ทดสอบเสียงกระดิ่งและแบนเนอร์ฉลองยอดใหม่">✦ ทดสอบ</button>
           <button type="button" class="wb-ctrl-btn fullscreen-btn" id="wb-fullscreen-btn">⛶ เต็มจอทีวี</button>
         </div>
       </div>
 
       <div class="wb-scene-bar">
         <div class="wb-scene-presets">
-          <span class="wb-scene-label">🎬 เลือกฉากออกจอ LIVE:</span>
+          <span class="wb-scene-label">🎬 เลือกฉาก:</span>
           <button type="button" class="wb-scene-pill" data-wb-preset="all">ครบทุกส่วน</button>
           <button type="button" class="wb-scene-pill" data-wb-preset="hero">💰 ยอดรวม & เป้าหมาย</button>
           <button type="button" class="wb-scene-pill" data-wb-preset="ranking">🏆 อันดับจังหวัดสูงสุด</button>
@@ -310,19 +335,33 @@
         </div>
 
         <div class="wb-controls">
-          <button type="button" class="wb-ctrl-btn" id="wb-clean-chrome-btn" title="ซ่อนแถบเมนูด้านบนทั้งหมด เพื่อนำภาพเฉพาะส่วนที่เลือกขึ้นจอทีวีสดหรือ OBS">📺 ซ่อนแถบเมนู (ออกจอสด)</button>
+          <div class="wb-autorotate-group ${wbRotateCfg.enabled?'is-running':''}" id="wb-autorotate-group">
+            <button type="button" class="wb-autorotate-toggle" id="wb-autorotate-btn" title="เปิด/ปิดการสลับฉากอัตโนมัติ">${wbRotateCfg.enabled?`🔄 สลับฉาก (${wbRotateCfg.intervalSec}วิ)`:'⏸ สลับอัตโนมัติ'}</button>
+            <select class="wb-rotate-select" id="wb-rotate-sec" aria-label="ตั้งเวลาสลับฉากอัตโนมัติ" title="ตั้งเวลาแสดงผลต่อฉาก">
+              ${[8,10,15,20,30,45,60].map(s => `<option value="${s}" ${wbRotateCfg.intervalSec===s?'selected':''}>หน้าละ ${s} วิ</option>`).join('')}
+            </select>
+          </div>
+          <button type="button" class="wb-ctrl-btn" id="wb-clean-chrome-btn" title="ซ่อนแถบเมนูด้านบนทั้งหมด เพื่อนำภาพขึ้นจอทีวีสดหรือ OBS">📺 ซ่อนแถบเมนู (ออกจอสด)</button>
           <div class="wb-picker-wrap" id="wb-picker-wrap">
-            <button type="button" class="wb-ctrl-btn" id="wb-picker-btn">🎛 เลือกส่วนแสดงผลเอง ▾</button>
+            <button type="button" class="wb-ctrl-btn" id="wb-picker-btn">🎛 ตั้งค่าแสดงผล ▾</button>
             <div class="wb-widget-popover hidden" id="wb-widget-popover">
-              <div class="wb-popover-title"><span>เลือกส่วนที่ต้องการให้ออกจอ LIVE</span><small class="muted">เลือกผสมได้</small></div>
-              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="hero"> <span>💰 ยอดบริจาคหลัก (ตัวเลขใหญ่)</span></label>
+              <div class="wb-popover-title"><span>🔄 ตั้งค่าสลับฉากอัตโนมัติ</span><small class="muted">เมื่อเปิดหรือเต็มจอ</small></div>
+              <label class="wb-widget-chk"><input type="checkbox" id="wb-rot-on-fs" ${wbRotateCfg.autoOnFullscreen?'checked':''}> <span>⛶ สลับฉากอัตโนมัติทันทีเมื่อกดเต็มจอทีวี</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-rot-scene="all" ${wbRotateCfg.scenes.all?'checked':''}> <span>วนฉาก: ครบทุกส่วน</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-rot-scene="hero" ${wbRotateCfg.scenes.hero?'checked':''}> <span>วนฉาก: 💰 ยอดรวม & เป้าหมาย</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-rot-scene="ranking" ${wbRotateCfg.scenes.ranking?'checked':''}> <span>วนฉาก: 🏆 อันดับจังหวัดสูงสุด</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-rot-scene="geo" ${wbRotateCfg.scenes.geo?'checked':''}> <span>วนฉาก: 🗺️ แผนที่ + จังหวัด</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-rot-scene="feed" ${wbRotateCfg.scenes.feed?'checked':''}> <span>วนฉาก: ♥ รายการร่วมบุญล่าสุด</span></label>
+              <div class="wb-popover-divider"></div>
+              <div class="wb-popover-title"><span>เลือกส่วนแสดงผลเอง</span><small class="muted">เลือกผสมได้</small></div>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="hero"> <span>💰 ยอดบริจาคหลัก</span></label>
               <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="goal"> <span>🎯 หลอดความคืบหน้าเป้าหมาย</span></label>
               <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="kpis"> <span>📊 การ์ดสถิติย่อย 4 ช่อง</span></label>
               <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="map"> <span>🗺️ แผนที่ประเทศไทย 77 จังหวัด</span></label>
               <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="ranking"> <span>🏆 อันดับจังหวัดสูงสุด</span></label>
               <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="feed"> <span>♥ รายการร่วมบริจาคล่าสุด</span></label>
               <div class="wb-popover-divider"></div>
-              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="celebrate"> <span>🎉 แบนเนอร์เด้งฉลองเมื่อยอดใหม่เข้า</span></label>
+              <label class="wb-widget-chk"><input type="checkbox" data-wb-wchk="celebrate"> <span>🎉 แบนเนอร์ฉลองเมื่อยอดใหม่เข้า</span></label>
             </div>
           </div>
         </div>
@@ -349,35 +388,103 @@
     updateClock();
     const clockTimer = setInterval(updateClock, 1000);
 
-    const animateCounterTo = (targetSatang) => {
-      const heroAmtEl = $('#wb-hero-amount');
-      if(!heroAmtEl){
-        displayedSatang = targetSatang;
-        return;
+    const activeRollTimers = new WeakMap();
+    const spawnDeltaPop = (boxEl, deltaSatang) => {
+      if(!boxEl || !(deltaSatang > 0)) return;
+      boxEl.querySelectorAll('.wb-delta-pop').forEach(n => n.remove());
+      const badge = document.createElement('span');
+      badge.className = 'wb-delta-pop';
+      badge.textContent = `+${money(deltaSatang)}`;
+      boxEl.appendChild(badge);
+      setTimeout(() => badge.remove(), 1800);
+    };
+
+    const pulseBoxEl = (boxEl) => {
+      if(!boxEl) return;
+      boxEl.classList.remove('is-pulsing');
+      void boxEl.offsetWidth;
+      boxEl.classList.add('is-pulsing');
+      setTimeout(() => boxEl.classList.remove('is-pulsing'), 1400);
+    };
+
+    const rollMoneyElement = (el, fromSatang, toSatang, opts = {}) => {
+      if(!el) return;
+      const prefix = opts.prefix || '';
+      const duration = opts.duration || 1150;
+      const boxEl = opts.boxEl || el.closest('.wb-hero-amount-wrap, .wb-ranking-solo-total, .wb-solo-prov-card, .wb-top-prov-row, .wb-kpi-box');
+      const prevFrame = activeRollTimers.get(el);
+      if(prevFrame) cancelAnimationFrame(prevFrame);
+
+      const startVal = Math.max(0, Math.round(fromSatang));
+      const endVal = Math.max(0, Math.round(toSatang));
+      const diff = endVal - startVal;
+
+      if(opts.pulse && boxEl){
+        pulseBoxEl(boxEl);
+        if(opts.deltaSatang > 0) spawnDeltaPop(boxEl, opts.deltaSatang);
       }
-      if(animFrame) cancelAnimationFrame(animFrame);
-      const startVal = displayedSatang;
-      const diff = targetSatang - startVal;
+
       if(diff === 0){
-        heroAmtEl.textContent = money(targetSatang);
+        el.classList.remove('wb-num-rolling');
+        el.textContent = prefix + money(endVal);
         return;
       }
+
+      el.classList.add('wb-num-rolling');
       const startTime = performance.now();
-      const duration = 900;
+
       const step = (ts) => {
+        if(!el.isConnected) return;
         const t = Math.min(1, (ts - startTime) / duration);
         const eased = 1 - Math.pow(1 - t, 3);
         const cur = Math.round(startVal + diff * eased);
-        displayedSatang = cur;
-        if(heroAmtEl.isConnected) heroAmtEl.textContent = money(cur);
+        if(opts.trackHero) displayedSatang = cur;
+
         if(t < 1){
-          animFrame = requestAnimationFrame(step);
+          el.textContent = prefix + money(cur);
+          activeRollTimers.set(el, requestAnimationFrame(step));
         } else {
-          displayedSatang = targetSatang;
-          if(heroAmtEl.isConnected) heroAmtEl.textContent = money(targetSatang);
+          if(opts.trackHero) displayedSatang = endVal;
+          el.classList.remove('wb-num-rolling');
+          el.textContent = prefix + money(endVal);
+          activeRollTimers.delete(el);
         }
       };
-      animFrame = requestAnimationFrame(step);
+      activeRollTimers.set(el, requestAnimationFrame(step));
+    };
+
+    const triggerMoneyInAnimation = (deltaSatang, provinceName = '') => {
+      const delta = Math.max(100, Number(deltaSatang || 0));
+      const totalConfirmed = Number(currentData.confirmed_satang || 0);
+      const fromTotal = Math.max(0, totalConfirmed - delta);
+
+      const heroEl = $('#wb-hero-amount');
+      if(heroEl){
+        rollMoneyElement(heroEl, fromTotal, totalConfirmed, { pulse: true, deltaSatang: delta, duration: 1200, trackHero: true });
+      }
+      const soloTotalEl = $('#wb-solo-total-amount');
+      if(soloTotalEl){
+        rollMoneyElement(soloTotalEl, fromTotal, totalConfirmed, { pulse: true, deltaSatang: delta, duration: 1200 });
+      }
+      const kpiTodayEl = $('#wb-kpi-today-amount');
+      if(kpiTodayEl){
+        const todayTot = Number(currentData.today_confirmed_satang || 0);
+        rollMoneyElement(kpiTodayEl, Math.max(0, todayTot - delta), todayTot, { pulse: true, deltaSatang: delta, duration: 1150 });
+      }
+      if(provinceName){
+        shellEl.querySelectorAll('[data-wb-prov-amt]').forEach(pEl => {
+          if(pEl.dataset.wbProvAmt === provinceName){
+            const pTarget = Number((currentData.province_amounts || {})[provinceName] || delta);
+            const pFrom = Math.max(0, pTarget - delta);
+            rollMoneyElement(pEl, pFrom, pTarget, { pulse: true, deltaSatang: delta, duration: 1200 });
+          }
+        });
+        const hoverPillStrong = $('#wb-map-hover-pill strong');
+        if(hoverPillStrong && (wbHoveredProv || pulseProvince) === provinceName){
+          const pTarget = Number((currentData.province_amounts || {})[provinceName] || delta);
+          rollMoneyElement(hoverPillStrong, Math.max(0, pTarget - delta), pTarget, { duration: 1150 });
+        }
+      }
     };
 
     const showCelebration = (item) => {
@@ -386,8 +493,13 @@
       if(!slot || !item) return;
       const who = strictPrivacy ? 'ผู้มีจิตศรัทธา' : (item.donor_short || 'ผู้มีจิตศรัทธา');
       const provTxt = item.province ? ` (จ.${item.province})` : '';
+      const amt = Number(item.amount_satang || 0);
       slot.className = 'wb-celebrate';
-      slot.innerHTML = `<div class="wb-celebrate-main"><span>🎉 ยอดร่วมบุญใหม่!</span> <strong>${esc(who + provTxt)}</strong> <span>ร่วมบริจาคใน ${esc(item.campaign_name || '')}</span></div><span class="wb-celebrate-amt">+${esc(money(item.amount_satang))}</span>`;
+      slot.innerHTML = `<div class="wb-celebrate-main"><span>🎉 ยอดร่วมบุญใหม่!</span> <strong>${esc(who + provTxt)}</strong> <span>ร่วมบริจาคใน ${esc(item.campaign_name || '')}</span></div><span class="wb-celebrate-amt" id="wb-celebrate-amt">+${esc(money(amt))}</span>`;
+      const celAmtEl = $('#wb-celebrate-amt');
+      if(celAmtEl && amt > 0){
+        rollMoneyElement(celAmtEl, 0, amt, { prefix: '+', duration: 950 });
+      }
       if(celebrateTimer) clearTimeout(celebrateTimer);
       celebrateTimer = setTimeout(() => { slot.className = 'hidden'; }, 7500);
     };
@@ -400,7 +512,7 @@
       if(!thGeo?.provinces?.length) return '<div class="muted mini">กำลังเตรียมแผนที่…</div>';
       const provAmts = data.province_amounts || {};
       const maxAmt = Math.max(1, ...Object.values(provAmts).map(v => Number(v) || 0));
-      const vb = isTall ? wbMapCam : { x: baseMapX, y: baseMapY, w: baseMapW, h: baseMapH };
+      const vb = wbMapCam;
       const paths = thGeo.provinces.map(gp => {
         const amt = Number(provAmts[gp.th] || 0);
         let cls = '';
@@ -408,7 +520,8 @@
           const r = Math.sqrt(amt / maxAmt);
           cls = r >= 0.8 ? 'w-h4' : r >= 0.55 ? 'w-h3' : r >= 0.3 ? 'w-h2' : 'w-h1';
         }
-        return `<path class="wb-prov-path ${cls}" data-wb-prov="${esc(gp.th)}" d="${gp.d}"><title>จ.${esc(gp.th)} — ${amt > 0 ? money(amt) : '฿0.00'}</title></path>`;
+        const pCls = gp.th === pulseProvince ? 'is-pulse-prov' : '';
+        return `<path class="wb-prov-path ${cls} ${pCls}" data-wb-prov="${esc(gp.th)}" d="${gp.d}"><title>จ.${esc(gp.th)} — ${amt > 0 ? money(amt) : '฿0.00'}</title></path>`;
       }).join('');
 
       const placedLbls = [];
@@ -436,28 +549,29 @@
         const anchor = targetGp.cx >= 290 ? 'start' : 'end';
         pulseSvg = `<g>
           <circle class="wb-pulse-ring" cx="${targetGp.cx}" cy="${targetGp.cy}" r="30"></circle>
+          <circle class="wb-pulse-ring ring-2" cx="${targetGp.cx}" cy="${targetGp.cy}" r="30"></circle>
           <circle class="wb-pulse-dot" cx="${targetGp.cx}" cy="${targetGp.cy}" r="8.5"></circle>
           <text class="wb-map-label pulse-lbl" x="${lx}" y="${targetGp.cy + 6}" text-anchor="${anchor}">${esc(pulseProvince)}</text>
         </g>`;
       }
 
-      const controlsHtml = isTall ? `<div class="wb-map-controls">
+      const controlsHtml = `<div class="wb-map-controls">
           <button type="button" class="wb-map-zoom-btn" id="wb-map-zin" title="ซูมเข้า (+)">＋</button>
           <button type="button" class="wb-map-zoom-btn" id="wb-map-zout" title="ซูมออก (−)">−</button>
           <button type="button" class="wb-map-zoom-btn" id="wb-map-zreset" title="รีเซ็ตมุมมองแผนที่">⟲</button>
-        </div>` : '';
+        </div>`;
 
       const inspectTarget = wbHoveredProv || pulseProvince || (data.top_provinces?.[0]?.province || '');
       const inspectAmt = inspectTarget ? Number(provAmts[inspectTarget] || 0) : 0;
-      const hoverPillHtml = (isTall && inspectTarget)
-        ? `<div class="wb-map-hover-pill" id="wb-map-hover-pill"><span>📍 จังหวัด${esc(inspectTarget)}</span><strong>${esc(money(inspectAmt))}</strong></div>`
+      const hoverPillHtml = inspectTarget
+        ? `<div class="wb-map-hover-pill" id="wb-map-hover-pill"><span>📍 จ.${esc(inspectTarget)}</span><strong>${esc(money(inspectAmt))}</strong></div>`
         : '';
 
       return `${controlsHtml}<svg class="wb-map-svg" id="wb-live-svg" viewBox="${vb.x.toFixed(1)} ${vb.y.toFixed(1)} ${vb.w.toFixed(1)} ${vb.h.toFixed(1)}" aria-hidden="true"><g>${paths}</g>${topPins}${pulseSvg}</svg>${hoverPillHtml}`;
     };
 
     const buildMapFooterHtml = (activeCnt) => `<div class="wb-map-footer">
-      <span>ร่วมบริจาคแล้ว <strong>${num(activeCnt)}</strong> จาก 77 จังหวัด</span>
+      <span>ร่วมบริจาคแล้ว <strong>${num(activeCnt)} / 77</strong> จังหวัด</span>
       <span class="wb-legend-scale">น้อย <i class="wb-swatch s0"></i><i class="wb-swatch s1"></i><i class="wb-swatch s2"></i><i class="wb-swatch s3"></i><i class="wb-swatch s4"></i> มาก</span>
     </div>`;
 
@@ -470,9 +584,9 @@
           <div class="wb-top-prov-left">
             <span class="wb-prov-medal ${mCls}">#${i + 1}</span>
             <span class="wb-prov-name">จ.${esc(p.province)}</span>
-            <span class="wb-prov-donors">${num(p.donor_count)} ท่าน</span>
+            <span class="wb-prov-donors">(${num(p.donor_count)} ท่าน)</span>
           </div>
-          <strong>${esc(money(p.amount_satang))}</strong>
+          <strong data-wb-prov-amt="${esc(p.province)}">${esc(money(p.amount_satang))}</strong>
         </div>`;
       }).join('');
     };
@@ -490,7 +604,7 @@
               <span class="wb-prov-medal ${mCls}">#${i + 1}</span>
               <span>จ.${esc(p.province)}</span>
             </div>
-            <span class="wb-solo-prov-amt">${esc(money(p.amount_satang))}</span>
+            <span class="wb-solo-prov-amt" data-wb-prov-amt="${esc(p.province)}">${esc(money(p.amount_satang))}</span>
           </div>
           <div class="progress-line wb-prov-bar"><div class="w-pct-${pct}"></div></div>
           <div class="wb-solo-prov-meta">
@@ -506,7 +620,7 @@
             <h2 class="wb-ranking-solo-title">🏆 อันดับจังหวัดที่ร่วมบริจาคสูงสุด</h2>
             <div class="wb-ranking-solo-sub">${esc(sel.name)} · ${wbScope === 'today' ? `ยอดประจำวันที่ ${esc(data.today_date)}` : 'ยอดสะสมที่ยืนยันแล้ว'}</div>
           </div>
-          ${!wbWidgets.hero ? `<div class="wb-ranking-solo-total"><span>ยอดบริจาครวม</span><strong>${esc(money(data.confirmed_satang || 0))}</strong></div>` : ''}
+          ${!wbWidgets.hero ? `<div class="wb-ranking-solo-total"><span>ยอดบริจาครวม</span><strong id="wb-solo-total-amount">${esc(money(data.confirmed_satang || 0))}</strong></div>` : ''}
         </div>
         ${cardsHtml}
       </section>`;
@@ -535,11 +649,11 @@
         campSelectEl.innerHTML = opts.join('');
       }
 
-      if(!dynGridEl) return;
+      if(!dynGridEl || isMapDragging) return;
+      const prevFeedScroll = $('#wb-feed-scroll-box')?.scrollTop || 0;
 
       const sel = data.selected_campaign || { name: 'รวมทุกโครงการระดมทุน', goal_satang: 0 };
       const hasHeroCard = wbWidgets.hero || wbWidgets.goal || wbWidgets.kpis;
-      // Split map & ranking into separate side-by-side cards if neither hero nor feed is shown!
       const splitGeoCards = (!hasHeroCard && !wbWidgets.feed && wbWidgets.map && wbWidgets.ranking);
 
       const panels = [];
@@ -554,25 +668,26 @@
             const rawPct = data.goal_pct ?? Math.round((confirmed / goal) * 1000) / 10;
             const clampPct = Math.min(100, Math.max(0, Math.round(confirmed / goal * 100)));
             const reached = confirmed >= goal;
+            const initBarPct = isInitial ? 0 : clampPct;
             goalHtml = `<div class="wb-goal-section">
               <div class="wb-goal-top">
                 <div class="wb-goal-pct">${num(rawPct)}% <small>ของเป้าหมายโครงการ</small></div>
                 <div class="wb-goal-target">เป้าหมาย ${esc(money(goal))}</div>
               </div>
-              <div class="progress-line wb-mega-bar"><div class="w-pct-${clampPct}"></div></div>
+              <div class="progress-line wb-mega-bar"><div class="w-pct-${initBarPct}" data-wb-bar-pct="${clampPct}"></div></div>
               <div class="wb-goal-foot">
-                <span>${reached ? 'อัลฮัมดุลิลลาฮ์ บรรลุเป้าหมายโครงการแล้ว' : `ยังขาดอีก ${money(data.remaining_satang || 0)} จะครบเป้าหมาย`}</span>
-                ${reached ? '<span class="wb-goal-badge">🎉 ทะลุเป้าหมาย 100%!</span>' : `<span>ยืนยันแล้ว ${num(data.confirmed_count || 0)} รายการ</span>`}
+                <span>${reached ? 'บรรลุเป้าหมายโครงการแล้ว' : `อีก ${money(data.remaining_satang || 0)} ครบเป้าหมาย`}</span>
+                ${reached ? '<span class="wb-goal-badge">🎉 ครบ 100%!</span>' : `<span>ยืนยันแล้ว ${num(data.confirmed_count || 0)} รายการ</span>`}
               </div>
             </div>`;
           } else {
             goalHtml = `<div class="wb-goal-section">
               <div class="wb-goal-top">
                 <div class="wb-goal-pct">${num(data.confirmed_count || 0)} <small>รายการร่วมบริจาคที่ยืนยันแล้ว</small></div>
-                <div class="wb-goal-target">โครงการเปิดรับบริจาคไม่จำกัดเป้าหมาย</div>
+                <div class="wb-goal-target">เปิดรับบริจาคไม่จำกัดเป้าหมาย</div>
               </div>
               <div class="progress-line wb-mega-bar"><div class="w-pct-100"></div></div>
-              <div class="wb-goal-foot"><span>ผู้ร่วมบุญสะสม ${num(data.unique_donors || 0)} ท่าน</span><span>เฉลี่ย ${money(data.avg_satang || 0)} ต่อรายการ</span></div>
+              <div class="wb-goal-foot"><span>ผู้ร่วมบุญ ${num(data.unique_donors || 0)} ท่าน</span><span>เฉลี่ย ${money(data.avg_satang || 0)} ต่อรายการ</span></div>
             </div>`;
           }
         }
@@ -580,8 +695,8 @@
         const kpiHtml = wbWidgets.kpis ? `<div class="wb-kpi-grid">
           <div class="wb-kpi-box">
             <div class="wb-kpi-label">ยอดยืนยันวันนี้ (${esc(data.today_date)})</div>
-            <div class="wb-kpi-val gold">${esc(money(data.today_confirmed_satang || 0))}</div>
-            <div class="wb-kpi-sub">${num(data.today_confirmed_count || 0)} รายการในวันนี้</div>
+            <div class="wb-kpi-val gold" id="wb-kpi-today-amount">${esc(money(data.today_confirmed_satang || 0))}</div>
+            <div class="wb-kpi-sub">${num(data.today_confirmed_count || 0)} รายการวันนี้</div>
           </div>
           <div class="wb-kpi-box">
             <div class="wb-kpi-label">ผู้มีจิตศรัทธาร่วมบริจาค</div>
@@ -591,12 +706,12 @@
           <div class="wb-kpi-box">
             <div class="wb-kpi-label">ค่าเฉลี่ยต่อรายการ</div>
             <div class="wb-kpi-val">${esc(money(data.avg_satang || 0))}</div>
-            <div class="wb-kpi-sub">คำนวณจากยอดที่ยืนยันแล้ว</div>
+            <div class="wb-kpi-sub">จากยอดที่ยืนยันแล้ว</div>
           </div>
           <div class="wb-kpi-box">
             <div class="wb-kpi-label">คิวรอการเงินตรวจสอบ</div>
             <div class="wb-kpi-val">${num(data.pending_count || 0)} รายการ</div>
-            <div class="wb-kpi-sub">มูลค่ารอตรวจ ${esc(money(data.pending_satang || 0))}</div>
+            <div class="wb-kpi-sub">รอตรวจ ${esc(money(data.pending_satang || 0))}</div>
           </div>
         </div>` : '';
 
@@ -604,11 +719,11 @@
           <div>
             <div class="wb-camp-tag">${wbScope === 'today' ? `LIVE TODAY · ประจำวันที่ ${esc(data.today_date)}` : 'CAMPAIGN LIVE FUNDRAISING'}</div>
             <h2 class="wb-camp-name">${esc(sel.name)}</h2>
-            ${wbWidgets.hero ? `<div class="wb-hero-amount-wrap">
-              <div class="wb-hero-caption">${wbScope === 'today' ? 'ยอดบริจาคที่ยืนยันแล้วเฉพาะวันนี้' : 'ยอดบริจาคสะสมที่ยืนยันแล้ว'}</div>
-              <div class="wb-hero-amount" id="wb-hero-amount">${esc(money(displayedSatang))}</div>
-            </div>` : ''}
           </div>
+          ${wbWidgets.hero ? `<div class="wb-hero-amount-wrap">
+            <div class="wb-hero-caption">${wbScope === 'today' ? 'ยอดบริจาคที่ยืนยันแล้วเฉพาะวันนี้' : 'ยอดบริจาคสะสมที่ยืนยันแล้ว'}</div>
+            <div class="wb-hero-amount" id="wb-hero-amount">${esc(money(displayedSatang))}</div>
+          </div>` : ''}
           ${goalHtml}
           ${kpiHtml}
         </section>`);
@@ -616,12 +731,12 @@
 
       // 2. Map & Province Leaderboard Panels
       const activeProvCnt = Object.keys(data.province_amounts || {}).length;
-      const pulseNote = pulseProvince ? `ล่าสุด: จ.${pulseProvince} · รวม ${num(activeProvCnt)} จังหวัด` : `ร่วมบุญแล้ว ${num(activeProvCnt)} จังหวัด`;
+      const pulseNote = pulseProvince ? `ล่าสุด: จ.${pulseProvince}` : `รวม ${num(activeProvCnt)} จังหวัด`;
 
       if(splitGeoCards){
         panels.push(`<section class="wb-card wb-map-card">
           <div class="wb-card-head"><h3>🗺️ แผนที่ผู้ร่วมบุญทั่วไทย (77 จังหวัด)</h3><small>${esc(pulseNote)}</small></div>
-          <div class="wb-map-box wb-map-tall" id="wb-tall-map-box">${buildMapSvgMarkup(data, true)}</div>
+          <div class="wb-map-box wb-map-tall" id="wb-interactive-map-box">${buildMapSvgMarkup(data, true)}</div>
           ${buildMapFooterHtml(activeProvCnt)}
         </section>`);
         panels.push(buildExpandedRankingCard(data, false));
@@ -629,17 +744,18 @@
         panels.push(`<section class="wb-card wb-map-card">
           <div>
             <div class="wb-card-head"><h3>🗺️ พื้นที่ผู้ร่วมบุญทั่วไทย</h3><small>${esc(pulseNote)}</small></div>
-            <div class="wb-map-box">${buildMapSvgMarkup(data, false)}</div>
+            <div class="wb-map-box" id="wb-interactive-map-box">${buildMapSvgMarkup(data, false)}</div>
+            ${buildMapFooterHtml(activeProvCnt)}
           </div>
           <div>
-            <div class="wb-card-head"><h3>🏆 อันดับจังหวัดสูงสุด</h3></div>
+            <div class="wb-card-head"><h3>🏆 อันดับจังหวัดสูงสุด (Top 5)</h3></div>
             <div class="wb-top-prov-list">${buildCompactRankingHtml(data, 5)}</div>
           </div>
         </section>`);
       } else if(wbWidgets.map){
         panels.push(`<section class="wb-card wb-map-card">
           <div class="wb-card-head"><h3>🗺️ แผนที่ผู้ร่วมบุญทั่วไทย (77 จังหวัด)</h3><small>${esc(pulseNote)}</small></div>
-          <div class="wb-map-box wb-map-tall" id="wb-tall-map-box">${buildMapSvgMarkup(data, true)}</div>
+          <div class="wb-map-box wb-map-tall" id="wb-interactive-map-box">${buildMapSvgMarkup(data, true)}</div>
           ${buildMapFooterHtml(activeProvCnt)}
         </section>`);
       } else if(wbWidgets.ranking){
@@ -675,20 +791,33 @@
         panels.push(`<section class="wb-card">
           <div class="wb-card-head">
             <h3>♥ รายการร่วมบริจาคล่าสุด${isSoloFeed ? ` · ${esc(sel.name)}` : ''}</h3>
-            <small>อัปเดตล่าสุด ${esc(data.server_time || '')} น.</small>
+            <small>อัปเดต ${esc(data.server_time || '')} น.</small>
           </div>
-          <div class="wb-feed-list ${isSoloFeed ? 'wb-feed-solo' : ''}">${feedHtml}</div>
+          <div class="wb-feed-list ${isSoloFeed ? 'wb-feed-solo' : ''}" id="wb-feed-scroll-box">${feedHtml}</div>
         </section>`);
       }
 
       const colCount = Math.min(3, Math.max(1, panels.length));
-      dynGridEl.className = `wb-grid cols-${colCount}`;
+      dynGridEl.className = `wb-grid cols-${colCount}${isInitial ? ' wb-enter' : ''}`;
       dynGridEl.innerHTML = panels.join('');
+      if(isInitial){
+        requestAnimationFrame(() => {
+          dynGridEl.querySelectorAll('[data-wb-bar-pct]').forEach(barEl => {
+            barEl.className = `w-pct-${barEl.dataset.wbBarPct}`;
+          });
+        });
+        setTimeout(() => dynGridEl.classList.remove('wb-enter'), 1050);
+      }
 
-      // Wire interactive zoom/pan/hover on tall map panel
-      const tallBox = $('#wb-tall-map-box');
+      const newFeedBox = $('#wb-feed-scroll-box');
+      if(newFeedBox && prevFeedScroll > 0 && !isInitial){
+        newFeedBox.scrollTop = prevFeedScroll;
+      }
+
+      // Wire interactive zoom/pan/hover on map panel
+      const mapBox = $('#wb-interactive-map-box');
       const liveSvg = $('#wb-live-svg');
-      if(tallBox && liveSvg){
+      if(mapBox && liveSvg){
         const applyWbCam = () => {
           wbMapCam.w = Math.max(baseMapW / 8, Math.min(baseMapW, wbMapCam.w));
           wbMapCam.h = wbMapCam.w * (baseMapH / baseMapW);
@@ -711,7 +840,7 @@
           wbMapCam = { x: baseMapX, y: baseMapY, w: baseMapW, h: baseMapH };
           applyWbCam();
         });
-        tallBox.addEventListener('wheel', e => {
+        mapBox.addEventListener('wheel', e => {
           e.preventDefault();
           const rect = liveSvg.getBoundingClientRect();
           const px = (e.clientX - rect.left) / Math.max(1, rect.width);
@@ -720,17 +849,18 @@
         }, { passive: false });
 
         let drag = null;
-        tallBox.addEventListener('pointerdown', e => {
+        mapBox.addEventListener('pointerdown', e => {
           if(e.target.closest('.wb-map-controls') || e.button !== 0) return;
           drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, cx: wbMapCam.x, cy: wbMapCam.y, cap: false };
         });
-        tallBox.addEventListener('pointermove', e => {
+        mapBox.addEventListener('pointermove', e => {
           if(!drag || e.pointerId !== drag.id) return;
           const dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
           if(!drag.cap && (Math.abs(dx) > 4 || Math.abs(dy) > 4)){
             drag.cap = true;
-            tallBox.classList.add('dragging');
-            try{ tallBox.setPointerCapture(e.pointerId); }catch(_){}
+            isMapDragging = true;
+            mapBox.classList.add('dragging');
+            try{ mapBox.setPointerCapture(e.pointerId); }catch(_){}
           }
           if(!drag.cap) return;
           const rect = liveSvg.getBoundingClientRect();
@@ -739,31 +869,35 @@
           applyWbCam();
         });
         const stopDrag = e => {
-          if(drag?.cap){ try{ tallBox.releasePointerCapture(e.pointerId); }catch(_){} }
+          if(drag?.cap){ try{ mapBox.releasePointerCapture(e.pointerId); }catch(_){} }
           drag = null;
-          tallBox.classList.remove('dragging');
+          isMapDragging = false;
+          mapBox.classList.remove('dragging');
         };
-        tallBox.addEventListener('pointerup', stopDrag);
-        tallBox.addEventListener('pointercancel', stopDrag);
+        mapBox.addEventListener('pointerup', stopDrag);
+        mapBox.addEventListener('pointercancel', stopDrag);
 
         const hoverPill = $('#wb-map-hover-pill');
-        tallBox.querySelectorAll('[data-wb-prov]').forEach(pEl => {
-          pEl.addEventListener('mouseenter', () => {
+        mapBox.querySelectorAll('[data-wb-prov]').forEach(pEl => {
+          const updateInspect = () => {
             wbHoveredProv = pEl.dataset.wbProv;
             if(hoverPill){
               const amt = Number((data.province_amounts || {})[wbHoveredProv] || 0);
-              hoverPill.innerHTML = `<span>📍 จังหวัด${esc(wbHoveredProv)}</span><strong>${esc(money(amt))}</strong>`;
+              hoverPill.innerHTML = `<span>📍 จ.${esc(wbHoveredProv)}</span><strong>${esc(money(amt))}</strong>`;
             }
-          });
+          };
+          pEl.addEventListener('mouseenter', updateInspect);
+          pEl.addEventListener('click', updateInspect);
         });
       }
 
       if(isInitial){
-        displayedSatang = Number(data.confirmed_satang || 0);
-        const heroAmtEl = $('#wb-hero-amount');
-        if(heroAmtEl) heroAmtEl.textContent = money(displayedSatang);
-      } else {
-        animateCounterTo(Number(data.confirmed_satang || 0));
+        const tot = Number(data.confirmed_satang || 0);
+        const heroEl = $('#wb-hero-amount');
+        if(heroEl) rollMoneyElement(heroEl, 0, tot, { duration: 1050, trackHero: true });
+        else displayedSatang = tot;
+        const soloTotalEl = $('#wb-solo-total-amount');
+        if(soloTotalEl) rollMoneyElement(soloTotalEl, 0, tot, { duration: 1050 });
       }
     };
 
@@ -775,6 +909,7 @@
       if(pollBusy || document.hidden) return;
       pollBusy = true;
       try{
+        const prevTot = Number(currentData.confirmed_satang || 0);
         const next = await api('wallboard', { campaign_id: wbSelectedCampaign, scope: wbScope });
         if(!shellEl.isConnected) return;
         if(resetSeen){
@@ -784,17 +919,25 @@
           renderWallboardData(next, true);
         } else {
           const freshItems = (next.recent_feed || []).filter(x => x.id && !seenIds.has(x.id));
+          let freshSum = 0;
+          let newest = null;
           if(freshItems.length > 0){
             freshItems.forEach(x => {
               seenIds.add(x.id);
               highlightedIds.add(x.id);
+              freshSum += Number(x.amount_satang || 0);
             });
-            const newest = freshItems[0];
+            newest = freshItems[0];
             if(newest.province) pulseProvince = newest.province;
             if(soundOn) playBroadcastChime();
             showCelebration(newest);
           }
           renderWallboardData(next, false);
+          const nextTot = Number(next.confirmed_satang || 0);
+          const delta = nextTot > prevTot ? (nextTot - prevTot) : freshSum;
+          if(delta > 0){
+            triggerMoneyInAnimation(delta, newest?.province || pulseProvince);
+          }
         }
       }catch(_){}
       finally{ pollBusy = false; }
@@ -804,14 +947,105 @@
     const onVisChange = () => { if(!document.hidden) pollNow(false); };
     document.addEventListener('visibilitychange', onVisChange);
 
-    // Scene Presets & Custom Widget Popover Wiring
-    shellEl.querySelectorAll('[data-wb-preset]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const p = scenePresets[btn.dataset.wbPreset];
-        if(!p) return;
+    // Scene Presets, Auto-Rotation & Custom Widget Popover Wiring
+    const rotGroupEl = $('#wb-autorotate-group');
+    const rotBtnEl = $('#wb-autorotate-btn');
+    const rotSecEl = $('#wb-rotate-sec');
+    const rotBarEl = $('#wb-rotate-bar');
+    const rotBarFillEl = $('#wb-rotate-bar-fill');
+
+    const syncAutoRotateUi = () => {
+      const totalMs = wbRotateCfg.intervalSec * 1000;
+      const remainSec = Math.max(1, Math.ceil((totalMs - rotateElapsedMs) / 1000));
+      const pct = wbRotateCfg.enabled ? Math.min(100, Math.max(0, Math.round((rotateElapsedMs / Math.max(1, totalMs)) * 100))) : 0;
+      rotGroupEl?.classList.toggle('is-running', !!wbRotateCfg.enabled);
+      if(rotBtnEl){
+        rotBtnEl.textContent = wbRotateCfg.enabled ? `🔄 สลับฉาก (${remainSec}วิ)` : '⏸ สลับอัตโนมัติ';
+      }
+      if(rotSecEl && Number(rotSecEl.value) !== wbRotateCfg.intervalSec){
+        rotSecEl.value = String(wbRotateCfg.intervalSec);
+      }
+      rotBarEl?.classList.toggle('hidden', !wbRotateCfg.enabled);
+      if(rotBarFillEl) rotBarFillEl.className = `w-pct-${pct}`;
+    };
+
+    const switchSceneAnimated = (presetKey) => {
+      const p = scenePresets[presetKey];
+      if(!p || isSceneTransitioning) return;
+      isSceneTransitioning = true;
+      rotateElapsedMs = 0;
+      syncAutoRotateUi();
+      if(dynGridEl) dynGridEl.classList.add('wb-scene-out');
+      setTimeout(() => {
         wbWidgets = { ...wbWidgets, ...p };
         saveWidgets();
+        if(dynGridEl) dynGridEl.classList.remove('wb-scene-out');
         renderWallboardData(currentData, true);
+        isSceneTransitioning = false;
+      }, 210);
+    };
+
+    const advanceNextScene = () => {
+      const enabledKeys = sceneOrder.filter(k => wbRotateCfg.scenes[k]);
+      if(enabledKeys.length < 2) return;
+      const curKey = detectActivePreset();
+      const idx = enabledKeys.indexOf(curKey);
+      const nextKey = enabledKeys[(idx + 1) % enabledKeys.length];
+      switchSceneAnimated(nextKey);
+    };
+
+    const rotateTimer = setInterval(() => {
+      if(!wbRotateCfg.enabled || document.hidden || isMapDragging || isSceneTransitioning) return;
+      rotateElapsedMs += 250;
+      const totalMs = wbRotateCfg.intervalSec * 1000;
+      if(rotateElapsedMs >= totalMs){
+        rotateElapsedMs = 0;
+        advanceNextScene();
+      } else {
+        syncAutoRotateUi();
+      }
+    }, 250);
+
+    rotBtnEl?.addEventListener('click', () => {
+      wbRotateCfg.enabled = !wbRotateCfg.enabled;
+      rotateElapsedMs = 0;
+      saveRotateCfg();
+      syncAutoRotateUi();
+    });
+
+    rotSecEl?.addEventListener('change', e => {
+      wbRotateCfg.intervalSec = Math.max(5, Number(e.target.value) || 15);
+      rotateElapsedMs = 0;
+      if(!wbRotateCfg.enabled) wbRotateCfg.enabled = true;
+      saveRotateCfg();
+      syncAutoRotateUi();
+    });
+
+    $('#wb-rot-on-fs')?.addEventListener('change', e => {
+      wbRotateCfg.autoOnFullscreen = !!e.target.checked;
+      saveRotateCfg();
+    });
+
+    shellEl.querySelectorAll('[data-wb-rot-scene]').forEach(chk => {
+      chk.addEventListener('change', () => {
+        const key = chk.dataset.wbRotScene;
+        wbRotateCfg.scenes[key] = chk.checked;
+        const activeList = sceneOrder.filter(k => wbRotateCfg.scenes[k]);
+        if(activeList.length < 2){
+          wbRotateCfg.scenes[key] = true;
+          chk.checked = true;
+          toast('ต้องเลือกอย่างน้อย 2 ฉากสำหรับการสลับฉากอัตโนมัติ', true);
+          return;
+        }
+        saveRotateCfg();
+      });
+    });
+
+    shellEl.querySelectorAll('[data-wb-preset]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.wbPreset;
+        if(detectActivePreset() === key) return;
+        switchSceneAnimated(key);
       });
     });
 
@@ -890,14 +1124,17 @@
     $('#wb-test-alert-btn')?.addEventListener('click', () => {
       if(soundOn) playBroadcastChime();
       const sample = currentData.recent_feed?.[0] || {
+        id: 'test_don',
         donor_short: 'คุณอับดุลเลาะห์ มี.',
-        province: 'ปัตตานี',
+        province: currentData.top_provinces?.[0]?.province || 'ปัตตานี',
         campaign_name: currentData.selected_campaign?.name || 'โครงการระดมทุน',
         amount_satang: 100000
       };
+      if(sample.id) highlightedIds.add(sample.id);
       if(sample.province) pulseProvince = sample.province;
       showCelebration(sample);
-      renderWallboardData(currentData, true);
+      renderWallboardData(currentData, false);
+      triggerMoneyInAnimation(sample.amount_satang || 100000, sample.province || pulseProvince);
     });
 
     // Fullscreen + Screen Wake Lock + Idle Control Dimming
@@ -922,9 +1159,21 @@
     requestWakeLock();
 
     const fsBtn = $('#wb-fullscreen-btn');
+    let autoStartedByFs = false;
     const syncFsButton = () => {
       const isFs = document.fullscreenElement === shellEl || shellEl.classList.contains('wb-fixed-fullscreen');
       if(fsBtn) fsBtn.textContent = isFs ? '✕ ออกจากเต็มจอ' : '⛶ เต็มจอทีวี';
+      if(isFs && wbRotateCfg.autoOnFullscreen && !wbRotateCfg.enabled){
+        wbRotateCfg.enabled = true;
+        autoStartedByFs = true;
+        rotateElapsedMs = 0;
+        syncAutoRotateUi();
+      } else if(!isFs && autoStartedByFs){
+        wbRotateCfg.enabled = false;
+        autoStartedByFs = false;
+        rotateElapsedMs = 0;
+        syncAutoRotateUi();
+      }
       if(!isFs && !wbWidgets.cleanChrome) shellEl.classList.remove('wb-idle-controls');
       else bumpActivity();
     };
@@ -954,6 +1203,7 @@
     wbCleanupFn = () => {
       clearInterval(clockTimer);
       clearInterval(pollTimer);
+      clearInterval(rotateTimer);
       if(celebrateTimer) clearTimeout(celebrateTimer);
       if(idleTimer) clearTimeout(idleTimer);
       if(animFrame) cancelAnimationFrame(animFrame);
